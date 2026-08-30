@@ -43,7 +43,8 @@
 4. **CST を正とする**: dict への変換はビュー。レイアウト情報は CST / trivia に保持
 5. **小さく進める**: 実装順に沿い、まず roundtrip（`00`）から
 6. **対応表を更新**: 機能を実装したら `docs/SUPPORT.md` のチェックボックスを更新
-7. **コミットはユーザー指示時のみ**: 明示されない限り git commit しない
+7. **Issue でタスク管理**: 作業は GitHub Issue に紐づける（詳細: `docs/ISSUES.md`）
+8. **コミットはユーザー指示時のみ**: 明示されない限り git commit しない
 
 ## 公開 API（確定）
 
@@ -133,6 +134,7 @@ tests/golden_errors/<case>/
 | `AGENTS.md`（本ファイル） | エージェント向け入口・進捗 |
 | `docs/DESIGN.md` | 詳細設計・API・削除ルール・実装順 |
 | `docs/SUPPORT.md` | 対応 / 未対応 / 対象外 |
+| `docs/ISSUES.md` | GitHub Issues によるタスク管理・Issue 一覧 |
 | `tests/golden/README.md` | ops.json スキーマ・ケース一覧 |
 | `tests/golden_errors/README.md` | エラーゴールデンの形式 |
 | `.cursor/rules/*.mdc` | Cursor ルール（自動適用） |
@@ -153,21 +155,29 @@ uv run ruff format .
 
 雛形未作成の間は上記は使えません。最初のタスクで `uv init` / `pyproject.toml` を整備してください。
 
+## タスク管理（GitHub Issues）
+
+作業タスクは GitHub Issues で管理する（Cursor 会話は別 PC に引き継げないため）。
+
+- **一覧・運用ルール**: [`docs/ISSUES.md`](docs/ISSUES.md)
+- **次に着手**: [#4 uv プロジェクト雛形](https://github.com/uttne/layout-yaml/issues/4)
+
+着手前に Issue 本文（タスク・合格基準）を読み、完了時は Issue を Close する。コミットメッセージには `(#N)` を付ける。
+
 ## 別 PC での再開手順
 
 1. リポジトリを clone / コピー
    - GitHub: https://github.com/uttne/layout-yaml
-   - タスク管理: [Issues](https://github.com/uttne/layout-yaml/issues)（次は **#4 uv 雛形** から）
+   - タスク管理: [Issues](https://github.com/uttne/layout-yaml/issues) — 詳細は [`docs/ISSUES.md`](docs/ISSUES.md)
 2. Cursor でワークスペースを開く（`.cursor/rules/` が自動読み込み）
-3. 本ファイル（`AGENTS.md`）と `docs/DESIGN.md` を読む
-4. 「次にやること」から続行。例: *「uv 雛形を作成し、lexer から実装を開始して」*
+3. 本ファイル（`AGENTS.md`）、`docs/DESIGN.md`、`docs/ISSUES.md` を読む
+4. Open Issue のうち依存が解消されたものから着手（現在は **#4**）
 
 ## 会話を引き継ぐときのプロンプト例
 
 ```text
-layout-yaml プロジェクトを継続します。AGENTS.md と docs/DESIGN.md を読んで、
-現在の進捗の次のステップ（uv 雛形 → lexer）から実装を進めてください。
-ゴールデンテスト tests/golden/00_identity_roundtrip を最初の合格目標にしてください。
+layout-yaml プロジェクトを継続します。AGENTS.md、docs/DESIGN.md、docs/ISSUES.md を読んで、
+Issue #4（uv プロジェクト雛形）から実装を進めてください。
 ```
 
 ## 未決定事項（実装時に詰める）

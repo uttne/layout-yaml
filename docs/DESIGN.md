@@ -265,14 +265,18 @@ class EditError(LayoutYamlError): ...        # 存在しないキー削除など
 
 ## 8. 実装順序（予定）
 
-1. 本ドキュメントとゴールデンデータ（完了対象）
-2. uv プロジェクト雛形（pytest / ruff / MIT / PyPI メタデータ）
-3. lexer → CST parser（読み取り・再 dump の恒等性）
-4. 値の置換
-5. 削除（trivia ルール）
-6. 追加（近傍スタイル / StyleConfig）
-7. Styled ラッパ
-8. エラーケースと SUPPORT の更新
+タスクは GitHub Issues で管理する。一覧・運用は [`docs/ISSUES.md`](ISSUES.md) を正とする。
+
+1. 本ドキュメントとゴールデンデータ — ✅ [#1](https://github.com/uttne/layout-yaml/issues/1) [#2](https://github.com/uttne/layout-yaml/issues/2)
+2. uv プロジェクト雛形 — [#4](https://github.com/uttne/layout-yaml/issues/4)
+3. lexer → CST parser（読み取り・再 dump の恒等性） — [#5](https://github.com/uttne/layout-yaml/issues/5) [#6](https://github.com/uttne/layout-yaml/issues/6)
+4. 値の置換 — [#7](https://github.com/uttne/layout-yaml/issues/7)
+5. 削除（trivia ルール） — [#8](https://github.com/uttne/layout-yaml/issues/8)
+6. 追加（近傍スタイル / StyleConfig） — [#9](https://github.com/uttne/layout-yaml/issues/9)
+7. Styled ラッパ — [#10](https://github.com/uttne/layout-yaml/issues/10)
+8. エラーケースと SUPPORT の更新 — [#11](https://github.com/uttne/layout-yaml/issues/11)
+9. ゴールデンテストランナー — [#12](https://github.com/uttne/layout-yaml/issues/12)
+10. PyPI 公開準備 — [#13](https://github.com/uttne/layout-yaml/issues/13)
 
 ## 9. 未決定・実装時に詰める項目
 
