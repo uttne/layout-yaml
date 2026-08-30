@@ -1,0 +1,4 @@
+items:
+  - name: one
+  - name: zwei  # keep
+  - name: three

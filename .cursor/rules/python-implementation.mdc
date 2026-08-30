@@ -1,0 +1,27 @@
+---
+description: layout-yaml Python 実装規約
+globs: src/**/*.py
+alwaysApply: false
+---
+
+# Python 実装
+
+## モジュール
+
+`lexer` → `parser` → `cst` → `api` → `emit`。`errors.py` に例外を集約。
+
+## 禁止
+
+- PyYAML / ruamel.yaml 等の YAML ライブラリ（ランタイム依存）
+- 全体を dict に変換してから再 dump（レイアウト喪失）
+
+## 推奨
+
+- トークン・ノードに `start`/`end` オフセットを持たせ、未変更は `source[start:end]` を emit
+- 公開 API は `__init__.py` から re-export
+- 型ヒントを付ける（Python 3.12+）
+- 実装順: roundtrip（`00_identity_roundtrip`）→ set → delete → add → styled → errors
+
+## 例外
+
+`LayoutYamlError` 基底。`ParseError` / `UnsupportedError` / `EditError` を公開。

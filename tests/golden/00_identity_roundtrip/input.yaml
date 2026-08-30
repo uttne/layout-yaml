@@ -1,0 +1,12 @@
+# Round-trip identity (no edits)
+
+name: demo  # comment
+items:
+  - a
+  - b
+
+empty:
+
+
+nested:
+  ok: true

@@ -1,0 +1,30 @@
+---
+description: ゴールデンテストの追加・変更ルール
+globs: tests/**/*
+alwaysApply: false
+---
+
+# Golden tests
+
+## 成功系 `tests/golden/<case>/`
+
+- `input.yaml` + `ops.json` + `expected.yaml`
+- 出力は **完全一致**（空白・コメント・改行含む）
+- 改行は LF
+
+## エラー系 `tests/golden_errors/<case>/`
+
+- `expected_error.json`: `error` 型名 + `message_contains` 部分文字列
+
+## ops.json
+
+- `path` は常に配列（mapping=文字列、sequence=整数）
+- `op`: `set` | `delete`
+- `style`（任意）: `plain` | `single` | `double` | `literal` | `folded`
+
+## 仕様変更時
+
+1. まず `expected.yaml`（または `expected_error.json`）を更新
+2. 理由を `docs/DESIGN.md` に追記
+3. 対応機能なら `docs/SUPPORT.md` のチェックを更新
+4. 破壊的 emit 変更はユーザー確認を推奨

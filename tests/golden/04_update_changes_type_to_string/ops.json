@@ -1,0 +1,14 @@
+{
+  "ops": [
+    {
+      "op": "set",
+      "path": ["retries"],
+      "value": "3"
+    },
+    {
+      "op": "set",
+      "path": ["strict"],
+      "value": "true"
+    }
+  ]
+}

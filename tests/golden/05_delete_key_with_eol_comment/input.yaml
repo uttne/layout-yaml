@@ -1,0 +1,3 @@
+keep: 1
+remove: old  # remove this key
+also_keep: 2

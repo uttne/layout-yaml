@@ -1,0 +1,3 @@
+retries: 3
+strict: true
+label: ok

@@ -1,0 +1,4 @@
+items:
+  - name: one
+  - name: two  # keep
+  - name: three

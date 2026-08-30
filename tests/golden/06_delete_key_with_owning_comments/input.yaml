@@ -1,0 +1,8 @@
+keep: 1
+
+# belongs to removable
+# also belongs to removable
+removable: yes
+
+# belongs to keep_tail
+keep_tail: 2

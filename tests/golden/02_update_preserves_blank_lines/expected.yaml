@@ -1,0 +1,11 @@
+name: demo
+
+# section: network
+
+host: 127.0.0.1
+
+port: 9090
+
+# section: flags
+
+enabled: true

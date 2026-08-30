@@ -1,0 +1,9 @@
+{
+  "ops": [
+    {
+      "op": "set",
+      "path": ["services", 1],
+      "value": "batch"
+    }
+  ]
+}

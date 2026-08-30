@@ -1,0 +1,9 @@
+# app settings
+
+database:
+  # primary host
+  host: old.example.com  # override in prod
+  port: 5432
+
+# feature flags
+debug: false

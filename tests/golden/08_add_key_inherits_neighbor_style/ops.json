@@ -1,0 +1,9 @@
+{
+  "ops": [
+    {
+      "op": "set",
+      "path": ["region"],
+      "value": "ap-northeast-1"
+    }
+  ]
+}

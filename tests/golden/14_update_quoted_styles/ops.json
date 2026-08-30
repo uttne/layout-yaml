@@ -1,0 +1,19 @@
+{
+  "ops": [
+    {
+      "op": "set",
+      "path": ["double"],
+      "value": "changed"
+    },
+    {
+      "op": "set",
+      "path": ["single"],
+      "value": "changed"
+    },
+    {
+      "op": "set",
+      "path": ["plain"],
+      "value": "changed"
+    }
+  ]
+}

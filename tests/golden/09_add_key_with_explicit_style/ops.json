@@ -1,0 +1,10 @@
+{
+  "ops": [
+    {
+      "op": "set",
+      "path": ["note"],
+      "value": "hello",
+      "style": "double"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "ops": [
+    {
+      "op": "set",
+      "path": ["alpha"],
+      "value": 20
+    },
+    {
+      "op": "set",
+      "path": ["new_tail"],
+      "value": 4
+    }
+  ]
+}
