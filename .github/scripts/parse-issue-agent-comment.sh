@@ -16,16 +16,23 @@ if [[ -z "$body" ]]; then
   exit 1
 fi
 
+# First @agent on its own line: empty token and "plan" are plan; "go" is go.
 mode=""
-if [[ "$body" =~ @agent[[:space:]]+(plan|go)([^[:alnum:]_]|$) ]]; then
-  mode="${BASH_REMATCH[1],,}"
+token=""
+if [[ "$body" =~ @agent[[:space:]]*([A-Za-z0-9_]*) ]]; then
+  token="${BASH_REMATCH[1],,}"
 fi
+
+case "$token" in
+  "" | plan) mode="plan" ;;
+  go) mode="go" ;;
+esac
 
 if [[ -z "$mode" ]]; then
   echo "invalid=true" >> "${GITHUB_OUTPUT:?GITHUB_OUTPUT required}"
-  echo "No supported @agent subcommand (plan | go)."
+  echo "No supported @agent subcommand (bare @agent | plan | go). token=${token:-<none>}"
   if [[ -n "${ISSUE_NUMBER:-}" && -n "${REPOSITORY:-}" && -n "${GH_TOKEN:-}" ]]; then
-    usage=$'⚠️ この Issue コメントでは `@agent` のサブコマンドを認識できませんでした。\n\n| コマンド | 用途 | workflow |\n| --- | --- | --- |\n| `@agent plan` | 方針のすり合わせ（コメント返信） | cursor-issue-agent.yml |\n| `@agent sync` | 議論を Issue 概要に反映 | cursor-issue-sync.yml |\n| `@agent go` | 実装・PR 作成 | cursor-issue-agent.yml |\n\n**同じコメント内の追加メッセージ**もエージェントが読みます。'
+    usage=$'⚠️ `@agent` の指定を認識できませんでした。\n\n| コメント | 動作 |\n| --- | --- |\n| `@agent` または `@agent plan` | 方針の会話（コメント返信） |\n| `@agent sync` | 議論を Issue 概要に反映 |\n| `@agent go` | 実装・PR 作成 |\n\n同じコメントの続きと、`@agent` が無い過去コメントも読みます。'
     gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body "$usage" || true
   fi
   exit 0

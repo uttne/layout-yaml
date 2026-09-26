@@ -52,7 +52,7 @@ Issue を `@agent` で進める場合:
 
 | コマンド | 用途 | Actions |
 |----------|------|---------|
-| `@agent plan` | 実装方針のすり合わせ（**Issue コメント**に返信） | [cursor-issue-agent.yml](.github/workflows/cursor-issue-agent.yml) |
+| `@agent` または `@agent plan` | 方針の会話（**Issue コメント**に短く返信。`@agent` 無しのコメントも文脈に含む） | [cursor-issue-agent.yml](.github/workflows/cursor-issue-agent.yml) |
 | `@agent sync` | コメント上の議論を **Issue 概要（本文）** に反映し、同期記録をコメント投稿 | [cursor-issue-sync.yml](.github/workflows/cursor-issue-sync.yml) |
 | `@agent go` | 実装・push・PR 作成 | [cursor-issue-agent.yml](.github/workflows/cursor-issue-agent.yml) |
 
@@ -61,8 +61,8 @@ Issue を `@agent` で進める場合:
 ### 1 Issue を実装するときの GitHub 上の流れ（推奨）
 
 1. **Issue 作成** — `docs/ISSUES.md` のテンプレどおり、タスク・合格基準を Issue **概要**に書く。
-2. **`@agent plan`** — 方針を議論。Agent は **コメント**で提案。人間はコメントで修正・合意。
-3. **（任意）`@agent plan` を繰り返す** — 論点が残る場合。
+2. **`@agent` または `@agent plan`** — 方針を会話する。Agent は**そのターンで変わった点だけ**短く返す。人間の返信に `@agent` は不要（次に Agent を呼ぶコメントで、それ以前の人間コメントも読む）。
+3. **必要なら会話を続ける** — 同じ Issue にコメントし、再度 `@agent` を付ける。
 4. **`@agent sync`** — 合意内容を Issue **概要**に統合。Agent は **同期記録**コメント（どの comment id まで反映したか）を残す。
 5. **人間が概要を確認** — 必要なら Issue 概要を手 edit、または `@agent sync` を再実行。
 6. **`@agent go`** — 実装・PR 作成（`Closes #N`）。Agent は Issue に完了報告コメント。

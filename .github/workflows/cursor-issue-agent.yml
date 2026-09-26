@@ -3,8 +3,9 @@
 # Trigger: comment on an Issue (not a PR) from the repository owner, containing @agent.
 #
 # Subcommands:
-#   @agent plan  — 方針すり合わせ（リポジトリ変更なし）
-#   @agent go    — 実装・push・PR 作成
+#   @agent / @agent plan  — 方針の会話（リポジトリ変更なし）
+#   @agent go             — 実装・push・PR 作成
+#   @agent sync           — cursor-issue-sync.yml（本 workflow では起動しない）
 #
 # Additional lines in the same comment are passed to the agent in full.
 #
@@ -29,8 +30,8 @@ jobs:
   agent:
     if: >-
       !github.event.issue.pull_request &&
-      (contains(github.event.comment.body, '@agent plan') ||
-       contains(github.event.comment.body, '@agent go')) &&
+      contains(github.event.comment.body, '@agent') &&
+      !contains(github.event.comment.body, '@agent sync') &&
       github.event.comment.user.login == github.repository_owner
     runs-on: ubuntu-latest
     timeout-minutes: 90
