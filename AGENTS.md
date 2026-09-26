@@ -48,14 +48,32 @@
 
 PR を `@agent` でレビューする際のプロジェクト固有指針は [`.cursor/pr-review.md`](.cursor/pr-review.md)（共通プロンプトは `.github/workflows/prompts/pr-review-agent.md`）。
 
-Issue を `@agent` で進める場合（Actions: `.github/workflows/cursor-issue-agent.yml`）:
+Issue を `@agent` で進める場合:
 
-| コマンド | 用途 |
-|----------|------|
-| `@agent plan` | 実装方針のすり合わせ（リポジトリは変更しない） |
-| `@agent go` | 実装・push・PR 作成 |
+| コマンド | 用途 | Actions |
+|----------|------|---------|
+| `@agent plan` | 実装方針のすり合わせ（**Issue コメント**に返信） | [cursor-issue-agent.yml](.github/workflows/cursor-issue-agent.yml) |
+| `@agent sync` | コメント上の議論を **Issue 概要（本文）** に反映し、同期記録をコメント投稿 | [cursor-issue-sync.yml](.github/workflows/cursor-issue-sync.yml) |
+| `@agent go` | 実装・push・PR 作成 | [cursor-issue-agent.yml](.github/workflows/cursor-issue-agent.yml) |
 
-**同じコメント内の追加メッセージ**（`@agent plan` / `@agent go` の後の改行以降）もエージェントが読みます。プロジェクト指針は [`.cursor/issue-agent.md`](.cursor/issue-agent.md)。
+**同じコメント内の追加メッセージ**（各コマンド行の後の改行以降）もエージェントが読みます。プロジェクト指針は [`.cursor/issue-agent.md`](.cursor/issue-agent.md)。
+
+### 1 Issue を実装するときの GitHub 上の流れ（推奨）
+
+1. **Issue 作成** — `docs/ISSUES.md` のテンプレどおり、タスク・合格基準を Issue **概要**に書く。
+2. **`@agent plan`** — 方針を議論。Agent は **コメント**で提案。人間はコメントで修正・合意。
+3. **（任意）`@agent plan` を繰り返す** — 論点が残る場合。
+4. **`@agent sync`** — 合意内容を Issue **概要**に統合。Agent は **同期記録**コメント（どの comment id まで反映したか）を残す。
+5. **人間が概要を確認** — 必要なら Issue 概要を手 edit、または `@agent sync` を再実行。
+6. **`@agent go`** — 実装・PR 作成（`Closes #N`）。Agent は Issue に完了報告コメント。
+7. **PR レビュー** — 人間、または PR 上で `@agent`（[cursor-pr-review.yml](.github/workflows/cursor-pr-review.yml)）。
+8. **マージ** — Issue は PR の `Closes #N` で Close。
+
+```text
+Issue 概要 … タスクの正本（sync で方針セクションを更新）
+Issue コメント … plan / sync 記録 / go 報告 / 人間の議論
+PR コメント … レビュー（@agent は PR のみ）
+```
 
 例:
 

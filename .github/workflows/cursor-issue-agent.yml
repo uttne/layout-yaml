@@ -29,7 +29,8 @@ jobs:
   agent:
     if: >-
       !github.event.issue.pull_request &&
-      contains(github.event.comment.body, '@agent') &&
+      (contains(github.event.comment.body, '@agent plan') ||
+       contains(github.event.comment.body, '@agent go')) &&
       github.event.comment.user.login == github.repository_owner
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -58,11 +59,7 @@ jobs:
           sparse-checkout-cone-mode: true
 
       - name: Load trigger comment
-        run: |
-          set -euo pipefail
-          # gh api --jq accepts a single expression; use jq -r for raw multiline .body
-          gh api "repos/$REPOSITORY/issues/comments/$COMMENT_ID" | jq -r .body > "$RUNNER_TEMP/trigger-comment.md"
-          echo "TRIGGER_COMMENT_PATH=$RUNNER_TEMP/trigger-comment.md" >> "$GITHUB_ENV"
+        run: bash .github/scripts/load-trigger-comment.sh
 
       - name: Parse @agent subcommand
         id: parse

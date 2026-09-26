@@ -25,7 +25,7 @@ if [[ -z "$mode" ]]; then
   echo "invalid=true" >> "${GITHUB_OUTPUT:?GITHUB_OUTPUT required}"
   echo "No supported @agent subcommand (plan | go)."
   if [[ -n "${ISSUE_NUMBER:-}" && -n "${REPOSITORY:-}" && -n "${GH_TOKEN:-}" ]]; then
-    usage=$'⚠️ この Issue コメントでは `@agent` のサブコマンドを認識できませんでした。\n\n| コマンド | 用途 |\n| --- | --- |\n| `@agent plan` | 実装方針のすり合わせ（リポジトリは変更しない） |\n| `@agent go` | 実装開始・PR 作成 |\n\n**同じコメント内の追加メッセージ**（改行以降の指示・制約・優先順位など）もエージェントが読みます。\n\n例:\n```\n@agent go\n\n#4 の合格基準どおり。コミットメッセージに (#4) を付けて。\n```'
+    usage=$'⚠️ この Issue コメントでは `@agent` のサブコマンドを認識できませんでした。\n\n| コマンド | 用途 | workflow |\n| --- | --- | --- |\n| `@agent plan` | 方針のすり合わせ（コメント返信） | cursor-issue-agent.yml |\n| `@agent sync` | 議論を Issue 概要に反映 | cursor-issue-sync.yml |\n| `@agent go` | 実装・PR 作成 | cursor-issue-agent.yml |\n\n**同じコメント内の追加メッセージ**もエージェントが読みます。'
     gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body "$usage" || true
   fi
   exit 0

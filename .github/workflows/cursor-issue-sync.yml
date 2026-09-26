@@ -1,0 +1,131 @@
+# Reflect Issue discussion into the Issue description (@agent sync).
+#
+# Trigger: comment on an Issue (not a PR) from the repository owner:
+#   @agent sync
+#
+# Posts a sync record comment documenting which comments were reflected.
+# Prompt: .github/workflows/prompts/issue-agent-sync.md
+#
+# Requires: CURSOR_API_KEY
+
+name: Cursor Issue sync (@agent sync)
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sync:
+    if: >-
+      !github.event.issue.pull_request &&
+      contains(github.event.comment.body, '@agent sync') &&
+      github.event.comment.user.login == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: cursor-issue-sync-${{ github.event.issue.number }}
+      cancel-in-progress: true
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      REPOSITORY: ${{ github.repository }}
+      TRIGGERED_BY: ${{ github.event.comment.user.login }}
+      COMMENT_ID: ${{ github.event.comment.id }}
+      TRIGGER_COMMENT_ID: ${{ github.event.comment.id }}
+      GITHUB_SERVER_URL: ${{ github.server_url }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      GITHUB_RUN_ID: ${{ github.run_id }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+    steps:
+      - name: Load workflow scripts
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+            .github/workflows/prompts
+            .cursor
+          sparse-checkout-cone-mode: true
+
+      - name: Load trigger comment
+        run: bash .github/scripts/load-trigger-comment.sh
+
+      - name: Parse @agent sync
+        id: parse
+        run: bash .github/scripts/parse-issue-sync-comment.sh
+
+      - name: Stop when command invalid
+        if: steps.parse.outputs.invalid == 'true'
+        run: echo "Not a valid @agent sync request."
+
+      - name: Acknowledge request
+        if: steps.parse.outputs.invalid != 'true'
+        run: |
+          set -euo pipefail
+          gh api --method POST \
+            "repos/$REPOSITORY/issues/comments/$COMMENT_ID/reactions" \
+            -f content='eyes' >/dev/null
+          bash .github/scripts/issue-sync-progress.sh received
+
+      - name: Progress — context loaded
+        if: steps.parse.outputs.invalid != 'true'
+        run: bash .github/scripts/issue-sync-progress.sh context_loaded
+
+      - name: Resolve default branch
+        if: steps.parse.outputs.invalid != 'true'
+        id: repo
+        run: |
+          set -euo pipefail
+          default_branch=$(gh repo view "$REPOSITORY" --json defaultBranchRef --jq .defaultBranchRef.name)
+          echo "default_branch=$default_branch" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout repository
+        if: steps.parse.outputs.invalid != 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.repo.outputs.default_branch }}
+          fetch-depth: 0
+
+      - name: Progress — repository checked out
+        if: steps.parse.outputs.invalid != 'true'
+        run: bash .github/scripts/issue-sync-progress.sh checked_out
+
+      - name: Install Cursor CLI
+        if: steps.parse.outputs.invalid != 'true'
+        run: |
+          set -euo pipefail
+          curl -fsSL https://cursor.com/install | bash
+          echo "$HOME/.cursor/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Progress — CLI ready
+        if: steps.parse.outputs.invalid != 'true'
+        run: bash .github/scripts/issue-sync-progress.sh cli_ready
+
+      - name: Run @agent sync
+        if: steps.parse.outputs.invalid != 'true'
+        timeout-minutes: 30
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          MODEL: composer-2.5[fast=false]
+          ISSUE_BODY_OUTPUT_PATH: ${{ runner.temp }}/issue-body.md
+          SYNC_RECORD_OUTPUT_PATH: ${{ runner.temp }}/issue-sync-record.md
+        run: bash .github/scripts/cursor-issue-sync.sh
+
+      - name: Progress — completed
+        if: success() && steps.parse.outputs.invalid != 'true'
+        run: bash .github/scripts/issue-sync-progress.sh completed
+
+      - name: Report failure on issue
+        if: failure() && steps.parse.outputs.invalid != 'true'
+        run: |
+          set -euo pipefail
+          if [[ -f "$RUNNER_TEMP/issue-sync-progress-comment-id" ]]; then
+            bash .github/scripts/issue-sync-progress.sh failed || true
+          fi
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body "⚠️ \`@agent sync\` を完了できませんでした。進捗コメントと [ワークフロー実行]($RUN_URL) を確認してください。"
