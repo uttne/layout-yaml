@@ -30,6 +30,7 @@ Cursor の会話履歴は別 PC に引き継げないため、Issue を進捗の
 | # | タイトル | 依存 |
 |---|----------|------|
 | [#4](https://github.com/uttne/layout-yaml/issues/4) | uv プロジェクト雛形のセットアップ | — |
+| [#14](https://github.com/uttne/layout-yaml/issues/14) | pytest / ruff の GitHub Actions CI | #4 |
 | [#5](https://github.com/uttne/layout-yaml/issues/5) | Lexer の実装 | #4 |
 | [#6](https://github.com/uttne/layout-yaml/issues/6) | CST パーサーと identity roundtrip | #5 |
 | [#7](https://github.com/uttne/layout-yaml/issues/7) | 辞書風 API と値の置換（set） | #6 |
