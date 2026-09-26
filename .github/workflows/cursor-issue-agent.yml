@@ -1,0 +1,191 @@
+# Issue 実装・方針すり合わせ via Cursor CLI.
+#
+# Trigger: comment on an Issue (not a PR) from the repository owner, containing @agent.
+#
+# Subcommands:
+#   @agent plan  — 方針すり合わせ（リポジトリ変更なし）
+#   @agent go    — 実装・push・PR 作成
+#
+# Additional lines in the same comment are passed to the agent in full.
+#
+# Prompts: .github/workflows/prompts/issue-agent-{plan,go}.md
+#          + .cursor/issue-agent.md (optional)
+#
+# Requires repository secret: CURSOR_API_KEY
+# See https://cursor.com/docs/cli/github-actions
+
+name: Cursor Issue agent (@agent)
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  agent:
+    if: >-
+      !github.event.issue.pull_request &&
+      contains(github.event.comment.body, '@agent') &&
+      github.event.comment.user.login == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    concurrency:
+      group: cursor-issue-agent-${{ github.event.issue.number }}
+      cancel-in-progress: true
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      REPOSITORY: ${{ github.repository }}
+      TRIGGERED_BY: ${{ github.event.comment.user.login }}
+      COMMENT_ID: ${{ github.event.comment.id }}
+      GITHUB_SERVER_URL: ${{ github.server_url }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      GITHUB_RUN_ID: ${{ github.run_id }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+    steps:
+      - name: Load workflow scripts
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+            .github/workflows/prompts
+          sparse-checkout-cone-mode: true
+
+      - name: Load trigger comment
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPOSITORY/issues/comments/$COMMENT_ID" --jq -r .body > "$RUNNER_TEMP/trigger-comment.md"
+          echo "TRIGGER_COMMENT_PATH=$RUNNER_TEMP/trigger-comment.md" >> "$GITHUB_ENV"
+
+      - name: Parse @agent subcommand
+        id: parse
+        run: bash .github/scripts/parse-issue-agent-comment.sh
+
+      - name: Stop when subcommand invalid
+        if: steps.parse.outputs.invalid == 'true'
+        run: echo "Unsupported @agent subcommand; usage comment posted."
+
+      - name: Acknowledge request
+        if: steps.parse.outputs.invalid != 'true'
+        env:
+          AGENT_MODE: ${{ steps.parse.outputs.mode }}
+        run: |
+          set -euo pipefail
+          gh api --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "repos/$REPOSITORY/issues/comments/$COMMENT_ID/reactions" \
+            -f content='eyes' >/dev/null
+          bash .github/scripts/issue-agent-progress.sh received
+
+      - name: Progress — issue context loaded
+        if: steps.parse.outputs.invalid != 'true'
+        env:
+          AGENT_MODE: ${{ steps.parse.outputs.mode }}
+        run: bash .github/scripts/issue-agent-progress.sh issue_loaded
+
+      - name: Resolve default branch
+        if: steps.parse.outputs.invalid != 'true'
+        id: repo
+        run: |
+          set -euo pipefail
+          default_branch=$(gh repo view "$REPOSITORY" --json defaultBranchRef --jq .defaultBranchRef.name)
+          echo "default_branch=$default_branch" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout repository
+        if: steps.parse.outputs.invalid != 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.repo.outputs.default_branch }}
+          fetch-depth: 0
+
+      - name: Progress — repository checked out
+        if: steps.parse.outputs.invalid != 'true'
+        env:
+          AGENT_MODE: ${{ steps.parse.outputs.mode }}
+        run: bash .github/scripts/issue-agent-progress.sh checked_out
+
+      - name: Prepare work branch (go)
+        if: steps.parse.outputs.invalid != 'true' && steps.parse.outputs.mode == 'go'
+        id: branch
+        env:
+          AGENT_MODE: go
+          DEFAULT_BRANCH: ${{ steps.repo.outputs.default_branch }}
+        run: |
+          set -euo pipefail
+          work_branch="agent/issue-${ISSUE_NUMBER}-${GITHUB_RUN_ID}"
+          git checkout -B "$work_branch"
+          echo "work_branch=$work_branch" >> "$GITHUB_OUTPUT"
+          BRANCH_NAME="$work_branch" WORK_BRANCH="$work_branch" bash .github/scripts/issue-agent-progress.sh branch_ready
+
+      - name: Install Cursor CLI
+        if: steps.parse.outputs.invalid != 'true'
+        run: |
+          set -euo pipefail
+          curl -fsSL https://cursor.com/install | bash
+          echo "$HOME/.cursor/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Progress — CLI ready
+        if: steps.parse.outputs.invalid != 'true'
+        env:
+          AGENT_MODE: ${{ steps.parse.outputs.mode }}
+          WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
+          BRANCH_NAME: ${{ steps.branch.outputs.work_branch }}
+        run: bash .github/scripts/issue-agent-progress.sh cli_ready
+
+      - name: Run @agent plan
+        if: steps.parse.outputs.invalid != 'true' && steps.parse.outputs.mode == 'plan'
+        timeout-minutes: 25
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          AGENT_MODE: plan
+          MODEL: composer-2.5[fast=false]
+          ISSUE_REPLY_OUTPUT_PATH: ${{ runner.temp }}/issue-agent-reply.md
+        run: bash .github/scripts/cursor-issue-agent.sh
+
+      - name: Progress — plan completed
+        if: success() && steps.parse.outputs.mode == 'plan'
+        env:
+          AGENT_MODE: plan
+        run: bash .github/scripts/issue-agent-progress.sh completed
+
+      - name: Run @agent go
+        if: steps.parse.outputs.invalid != 'true' && steps.parse.outputs.mode == 'go'
+        timeout-minutes: 75
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          AGENT_MODE: go
+          MODEL: composer-2.5[fast=false]
+          DEFAULT_BRANCH: ${{ steps.repo.outputs.default_branch }}
+          WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
+        run: |
+          set -euo pipefail
+          bash .github/scripts/cursor-issue-agent.sh
+          bash .github/scripts/issue-agent-progress.sh publishing
+
+      - name: Progress — go completed
+        if: success() && steps.parse.outputs.mode == 'go'
+        env:
+          AGENT_MODE: go
+          WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
+          BRANCH_NAME: ${{ steps.branch.outputs.work_branch }}
+        run: bash .github/scripts/issue-agent-progress.sh completed
+
+      - name: Report failure on issue
+        if: failure() && steps.parse.outputs.invalid != 'true'
+        env:
+          AGENT_MODE: ${{ steps.parse.outputs.mode }}
+          WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
+          BRANCH_NAME: ${{ steps.branch.outputs.work_branch }}
+        run: |
+          set -euo pipefail
+          if [[ -f "$RUNNER_TEMP/issue-agent-progress-comment-id" ]]; then
+            bash .github/scripts/issue-agent-progress.sh failed || true
+          fi
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body "⚠️ \`@agent ${AGENT_MODE}\` を完了できませんでした。進捗コメントと [ワークフロー実行]($RUN_URL) を確認してください。"

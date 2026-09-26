@@ -48,6 +48,23 @@
 
 PR を `@agent` でレビューする際のプロジェクト固有指針は [`.cursor/pr-review.md`](.cursor/pr-review.md)（共通プロンプトは `.github/workflows/prompts/pr-review-agent.md`）。
 
+Issue を `@agent` で進める場合（Actions: `.github/workflows/cursor-issue-agent.yml`）:
+
+| コマンド | 用途 |
+|----------|------|
+| `@agent plan` | 実装方針のすり合わせ（リポジトリは変更しない） |
+| `@agent go` | 実装・push・PR 作成 |
+
+**同じコメント内の追加メッセージ**（`@agent plan` / `@agent go` の後の改行以降）もエージェントが読みます。プロジェクト指針は [`.cursor/issue-agent.md`](.cursor/issue-agent.md)。
+
+例:
+
+```text
+@agent go
+
+#4 の合格基準どおり。pyproject のみ触る。コミットに (#4) を付けて。
+```
+
 ## 公開 API（確定）
 
 辞書風 API + スタイルラッパ。パス API（`doc.set(["a","b"], v)`）は初期必須ではない。
