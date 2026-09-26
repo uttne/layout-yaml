@@ -21,7 +21,7 @@
 3. **小さく**: 実装順（roundtrip `00` から）。Issue 1 件 = 1 PR を基本とする。
 4. **CST**: 未変更部分は source スライス再利用。diff を広げない。
 5. **コミット**: 依頼者コメントに指示がなければ、明示的なユーザー指示なしの amend は避ける。
-6. **Issue 運用**: `docs/ISSUES.md` の合格基準を満たしたら PR 本文で `Closes #N`。
+6. **Issue 運用**: `docs/ISSUES.md` の合格基準を満たしたら PR 本文で `Closes #N`。`@agent go` の続きは Issue の実装記録コメントと既存ブランチを見る。`.github/workflows/` は Actions から変更しない。
 
 ## 参照パス
 

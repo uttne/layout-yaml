@@ -21,6 +21,7 @@ on:
   issue_comment:
     types: [created]
 
+# workflows: write は意図的に付けない。.github/workflows の push はしない。
 permissions:
   contents: write
   pull-requests: write
@@ -117,10 +118,10 @@ jobs:
           DEFAULT_BRANCH: ${{ steps.repo.outputs.default_branch }}
         run: |
           set -euo pipefail
-          work_branch="agent/issue-${ISSUE_NUMBER}-${GITHUB_RUN_ID}"
-          git checkout -B "$work_branch"
-          echo "work_branch=$work_branch" >> "$GITHUB_OUTPUT"
-          BRANCH_NAME="$work_branch" WORK_BRANCH="$work_branch" bash .github/scripts/issue-agent-progress.sh branch_ready
+          bash .github/scripts/prepare-go-branch.sh
+          # shellcheck disable=SC1091
+          source "${RUNNER_TEMP}/go-branch.env"
+          BRANCH_NAME="$WORK_BRANCH" bash .github/scripts/issue-agent-progress.sh branch_ready
 
       - name: Install Cursor CLI
         if: steps.parse.outputs.invalid != 'true'
@@ -155,7 +156,9 @@ jobs:
         run: bash .github/scripts/issue-agent-progress.sh completed
 
       - name: Run @agent go
+        id: go_agent
         if: steps.parse.outputs.invalid != 'true' && steps.parse.outputs.mode == 'go'
+        continue-on-error: true
         timeout-minutes: 75
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
@@ -163,10 +166,26 @@ jobs:
           MODEL: composer-2.5[fast=false]
           DEFAULT_BRANCH: ${{ steps.repo.outputs.default_branch }}
           WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
+          GO_RESUMED: ${{ steps.branch.outputs.resumed }}
+          GO_STATUS_PATH: ${{ runner.temp }}/go-status.md
+        run: bash .github/scripts/cursor-issue-agent.sh
+
+      - name: Publish branch, pull request, and implementation record
+        if: steps.parse.outputs.invalid != 'true' && steps.parse.outputs.mode == 'go'
+        env:
+          AGENT_MODE: go
+          DEFAULT_BRANCH: ${{ steps.repo.outputs.default_branch }}
+          WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
+          BRANCH_NAME: ${{ steps.branch.outputs.work_branch }}
+          GO_STATUS_PATH: ${{ runner.temp }}/go-status.md
         run: |
           set -euo pipefail
-          bash .github/scripts/cursor-issue-agent.sh
           bash .github/scripts/issue-agent-progress.sh publishing
+          bash .github/scripts/publish-go.sh
+
+      - name: Fail when go agent did not finish
+        if: steps.go_agent.outcome == 'failure'
+        run: exit 1
 
       - name: Progress — go completed
         if: success() && steps.parse.outputs.mode == 'go'

@@ -30,7 +30,9 @@ substitute_prompt_vars() {
     -e "s|\$TRIGGERED_BY|${TRIGGERED_BY}|g" \
     -e "s|\$ISSUE_REPLY_OUTPUT_PATH|${ISSUE_REPLY_OUTPUT_PATH}|g" \
     -e "s|\$DEFAULT_BRANCH|${DEFAULT_BRANCH:-main}|g" \
-    -e "s|\$WORK_BRANCH|${WORK_BRANCH:-}|g"
+    -e "s|\$WORK_BRANCH|${WORK_BRANCH:-}|g" \
+    -e "s|\$GO_RESUMED|${GO_RESUMED:-false}|g" \
+    -e "s|\$GO_STATUS_PATH|${GO_STATUS_PATH:-}|g"
 }
 
 # Full comment body may contain newlines and sed delimiters; inject via env block in prompt assembly.
