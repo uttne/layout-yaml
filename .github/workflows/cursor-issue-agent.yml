@@ -60,7 +60,8 @@ jobs:
       - name: Load trigger comment
         run: |
           set -euo pipefail
-          gh api "repos/$REPOSITORY/issues/comments/$COMMENT_ID" --jq -r .body > "$RUNNER_TEMP/trigger-comment.md"
+          # gh api --jq accepts a single expression; use jq -r for raw multiline .body
+          gh api "repos/$REPOSITORY/issues/comments/$COMMENT_ID" | jq -r .body > "$RUNNER_TEMP/trigger-comment.md"
           echo "TRIGGER_COMMENT_PATH=$RUNNER_TEMP/trigger-comment.md" >> "$GITHUB_ENV"
 
       - name: Parse @agent subcommand
