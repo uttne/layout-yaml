@@ -9,7 +9,9 @@
 # Requires repository secret: CURSOR_API_KEY
 # See https://cursor.com/docs/cli/github-actions
 #
-# Model: composer-2.5 (non-fast). Avoid "auto" — it may route to premium models.
+# Model: Composer 2.5 chooses Composer 2.5 or Grok 4.7 medium from the
+# pull request. Avoid "auto" — it may route to other premium models.
+# Review scripts are taken from the default branch, then the PR head is checked out.
 #
 # Trigger auth: only the repository owner (uttne) may invoke @agent. Public repos
 # cannot restrict who may comment on issues/PRs to a single user at the GitHub level.
@@ -42,6 +44,7 @@ jobs:
       PR_NUMBER: ${{ github.event.issue.number }}
       REPOSITORY: ${{ github.repository }}
       TRIGGERED_BY: ${{ github.event.comment.user.login }}
+      COMMENT_ID: ${{ github.event.comment.id }}
       GITHUB_SERVER_URL: ${{ github.server_url }}
       GITHUB_REPOSITORY: ${{ github.repository }}
       GITHUB_RUN_ID: ${{ github.run_id }}
@@ -56,16 +59,27 @@ jobs:
             .github/workflows/prompts
           sparse-checkout-cone-mode: true
 
+      - name: Preserve workflow scripts
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pr-tools/scripts" "$RUNNER_TEMP/pr-tools/prompts"
+          cp .github/scripts/agentlib.py "$RUNNER_TEMP/pr-tools/scripts/"
+          cp .github/scripts/pr_review.py "$RUNNER_TEMP/pr-tools/scripts/"
+          cp .github/workflows/prompts/pr-review-agent.md "$RUNNER_TEMP/pr-tools/prompts/"
+          {
+            echo "AGENTLIB=$RUNNER_TEMP/pr-tools/scripts/agentlib.py"
+            echo "PR_REVIEW=$RUNNER_TEMP/pr-tools/scripts/pr_review.py"
+            echo "PROMPT_TEMPLATE_PATH=$RUNNER_TEMP/pr-tools/prompts/pr-review-agent.md"
+          } >> "$GITHUB_ENV"
+
       - name: Acknowledge review request
-        env:
-          COMMENT_ID: ${{ github.event.comment.id }}
         run: |
           set -euo pipefail
           gh api --method POST \
             -H "Accept: application/vnd.github+json" \
             "repos/$REPOSITORY/issues/comments/$COMMENT_ID/reactions" \
             -f content='eyes' >/dev/null
-          bash .github/scripts/pr-review-progress.sh received
+          python3 "$AGENTLIB" progress pr received
 
       - name: Resolve pull request context
         id: pr
@@ -91,7 +105,7 @@ jobs:
             echo "head_sha=$head_sha"
             echo "base_sha=$base_sha"
           } >> "$GITHUB_OUTPUT"
-          PR_HEAD_SHA="$head_sha" bash .github/scripts/pr-review-progress.sh pr_resolved
+          PR_HEAD_SHA="$head_sha" python3 "$AGENTLIB" progress pr pr_resolved
 
       - name: Checkout pull request head
         uses: actions/checkout@v4
@@ -103,7 +117,7 @@ jobs:
       - name: Progress — checkout complete
         env:
           PR_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
-        run: bash .github/scripts/pr-review-progress.sh checked_out
+        run: python3 "$AGENTLIB" progress pr checked_out
 
       - name: Install Cursor CLI
         run: |
@@ -115,23 +129,34 @@ jobs:
       - name: Progress — CLI ready
         env:
           PR_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
-        run: bash .github/scripts/pr-review-progress.sh cli_ready
+        run: python3 "$AGENTLIB" progress pr cli_ready
+
+      - name: Select agent model
+        timeout-minutes: 8
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          ROUTER_TASK: review
+        run: python3 "$AGENTLIB" select-model
+
+      - name: Progress — model selected
+        env:
+          PR_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: python3 "$AGENTLIB" progress pr cli_ready
 
       - name: Run review and post PR comment
         timeout-minutes: 20
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
-          MODEL: composer-2.5[fast=false]
           PR_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
           PR_BASE_SHA: ${{ steps.pr.outputs.base_sha }}
           REVIEW_OUTPUT_PATH: ${{ runner.temp }}/pr-review.md
-        run: bash .github/scripts/cursor-pr-review.sh
+        run: python3 "$PR_REVIEW"
 
       - name: Progress — completed
         if: success()
         env:
           PR_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
-        run: bash .github/scripts/pr-review-progress.sh completed
+        run: python3 "$AGENTLIB" progress pr completed
 
       - name: Report failure on pull request
         if: failure()
@@ -140,6 +165,6 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -f "$RUNNER_TEMP/pr-review-progress-comment-id" ]]; then
-            bash .github/scripts/pr-review-progress.sh failed || true
+            python3 "$AGENTLIB" progress pr failed || true
           fi
           gh pr comment "$PR_NUMBER" --repo "$REPOSITORY" --body "⚠️ @agent レビューを完了できませんでした。進捗コメントと [ワークフロー実行]($RUN_URL) を確認してください。"

@@ -1,7 +1,7 @@
 # 共通 Issue `@agent plan` プロンプト（リポジトリ間でコピー可）
 #
 # プロジェクト固有の指針は `.cursor/issue-agent.md`。
-# 依頼者コメント全文は cursor-issue-agent.sh がプロンプト末尾に追加する。
+# 依頼者コメント全文は issue_agent.py がプロンプト末尾に追加する。
 #
 # 文体の反面教師: https://github.com/uttne/layout-yaml/issues/4
 # （毎回「前提表・作業ステップ全文・ファイル一覧・合格表・go 用コピペ」を再掲していた）

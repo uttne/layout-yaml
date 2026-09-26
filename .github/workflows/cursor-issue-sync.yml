@@ -6,6 +6,9 @@
 # Posts a sync record comment documenting which comments were reflected.
 # Prompt: .github/workflows/prompts/issue-agent-sync.md
 #
+# Model: Composer 2.5 chooses Composer 2.5 or Grok 4.7 medium from the
+# issue discussion. Avoid "auto" — it may route to other premium models.
+#
 # Requires: CURSOR_API_KEY
 
 name: Cursor Issue sync (@agent sync)
@@ -70,11 +73,11 @@ jobs:
           gh api --method POST \
             "repos/$REPOSITORY/issues/comments/$COMMENT_ID/reactions" \
             -f content='eyes' >/dev/null
-          bash .github/scripts/issue-sync-progress.sh received
+          python3 .github/scripts/agentlib.py progress sync received
 
       - name: Progress — context loaded
         if: steps.parse.outputs.invalid != 'true'
-        run: bash .github/scripts/issue-sync-progress.sh context_loaded
+        run: python3 .github/scripts/agentlib.py progress sync context_loaded
 
       - name: Resolve default branch
         if: steps.parse.outputs.invalid != 'true'
@@ -93,7 +96,7 @@ jobs:
 
       - name: Progress — repository checked out
         if: steps.parse.outputs.invalid != 'true'
-        run: bash .github/scripts/issue-sync-progress.sh checked_out
+        run: python3 .github/scripts/agentlib.py progress sync checked_out
 
       - name: Install Cursor CLI
         if: steps.parse.outputs.invalid != 'true'
@@ -105,27 +108,38 @@ jobs:
 
       - name: Progress — CLI ready
         if: steps.parse.outputs.invalid != 'true'
-        run: bash .github/scripts/issue-sync-progress.sh cli_ready
+        run: python3 .github/scripts/agentlib.py progress sync cli_ready
+
+      - name: Select agent model
+        if: steps.parse.outputs.invalid != 'true'
+        timeout-minutes: 8
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          ROUTER_TASK: sync
+        run: python3 .github/scripts/agentlib.py select-model
+
+      - name: Progress — model selected
+        if: steps.parse.outputs.invalid != 'true'
+        run: python3 .github/scripts/agentlib.py progress sync cli_ready
 
       - name: Run @agent sync
         if: steps.parse.outputs.invalid != 'true'
         timeout-minutes: 30
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
-          MODEL: composer-2.5[fast=false]
           ISSUE_BODY_OUTPUT_PATH: ${{ runner.temp }}/issue-body.md
           SYNC_RECORD_OUTPUT_PATH: ${{ runner.temp }}/issue-sync-record.md
-        run: bash .github/scripts/cursor-issue-sync.sh
+        run: python3 .github/scripts/issue_sync.py
 
       - name: Progress — completed
         if: success() && steps.parse.outputs.invalid != 'true'
-        run: bash .github/scripts/issue-sync-progress.sh completed
+        run: python3 .github/scripts/agentlib.py progress sync completed
 
       - name: Report failure on issue
         if: failure() && steps.parse.outputs.invalid != 'true'
         run: |
           set -euo pipefail
           if [[ -f "$RUNNER_TEMP/issue-sync-progress-comment-id" ]]; then
-            bash .github/scripts/issue-sync-progress.sh failed || true
+            python3 .github/scripts/agentlib.py progress sync failed || true
           fi
           gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body "⚠️ \`@agent sync\` を完了できませんでした。進捗コメントと [ワークフロー実行]($RUN_URL) を確認してください。"

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Issue @agent progress comments, note polling, and prompt assembly.
+"""Issue @agent progress comments, prompt assembly, and the plan/go run.
 
-Stdlib only. GitHub Actions invokes this via the thin bash wrappers.
+Stdlib only. Shared model selection and checkpoint rendering live in agentlib.py.
 """
 
 from __future__ import annotations
@@ -9,10 +9,18 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
+
+_SCRIPTS = Path(__file__).resolve().parent
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+
+import agentlib
 
 PLAN_CHECKPOINTS = (
     "リクエスト受付",
@@ -72,16 +80,6 @@ def active_index_path() -> Path:
     return runner_temp() / "issue-agent-progress-active-index"
 
 
-def run_url() -> str:
-    explicit = os.environ.get("RUN_URL", "")
-    if explicit:
-        return explicit
-    server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
-    repo = os.environ.get("GITHUB_REPOSITORY", "")
-    run_id = os.environ.get("GITHUB_RUN_ID", "unknown")
-    return f"{server}/{repo}/actions/runs/{run_id}"
-
-
 def checkpoints(mode: str) -> tuple[str, ...]:
     if mode == "plan":
         return PLAN_CHECKPOINTS
@@ -124,18 +122,6 @@ def save_active_index(index: int) -> None:
 
 
 def render_body(mode: str, stage: str, active_index: int, note: str) -> str:
-    rows: list[str] = []
-    for index, label in enumerate(checkpoints(mode)):
-        if stage == "failed" and index == active_index:
-            icon = "❌"
-        elif stage == "completed" or index < active_index:
-            icon = "✅"
-        elif index == active_index and stage != "completed":
-            icon = "🔄"
-        else:
-            icon = "⏳"
-        rows.append(f"| {label} | {icon} |")
-
     meta = [f"モード: `@agent {mode}`"]
     triggered_by = os.environ.get("TRIGGERED_BY", "")
     if triggered_by:
@@ -143,19 +129,16 @@ def render_body(mode: str, stage: str, active_index: int, note: str) -> str:
     branch = os.environ.get("BRANCH_NAME", "")
     if branch:
         meta.append(f"ブランチ: `{branch}`")
-
+    selected_model = agentlib.model_label()
+    if selected_model:
+        meta.append(f"モデル: {selected_model}")
     note_section = f"\n### いまの作業\n\n{note}\n" if note else ""
-    table = "\n".join(rows)
-    meta_block = "\n".join(meta)
-    return (
-        "## @agent Issue 進捗\n\n"
-        f"{meta_block}\n\n"
-        "| チェックポイント | 状態 |\n"
-        "| --- | --- |\n"
-        f"{table}\n"
-        f"{note_section}"
-        f"[ワークフロー実行]({run_url()})\n\n"
-        "_このコメントはチェックポイントごとに自動更新されます。_\n"
+    return agentlib.progress_document(
+        "@agent Issue 進捗",
+        meta,
+        agentlib.checkpoint_rows(checkpoints(mode), stage, active_index),
+        "_このコメントはチェックポイントごとに自動更新されます。_",
+        extra=note_section,
     )
 
 
@@ -212,14 +195,17 @@ def update_progress(stage: str) -> None:
     print(f"Issue progress updated (mode={mode}, stage={stage}, id={comment_id}).")
 
 
-def poll_notes() -> None:
+def poll_notes(stop: threading.Event | None = None) -> None:
     interval = int(os.environ.get("NOTE_POLL_SECONDS", "30"))
     path = note_path()
     if path is None:
         return
     last = ""
     while True:
-        time.sleep(interval)
+        if stop is None:
+            time.sleep(interval)
+        elif stop.wait(interval):
+            return
         current = read_note(path)
         if not current or current == last:
             continue
@@ -228,6 +214,45 @@ def poll_notes() -> None:
         except SystemExit as exc:
             print(f"Note update failed: {exc}", file=sys.stderr)
         last = current
+
+
+def run_agent() -> None:
+    mode = require_env("AGENT_MODE")
+    if mode not in {"plan", "go"}:
+        raise SystemExit("AGENT_MODE must be plan or go")
+    if not os.environ.get("CURSOR_API_KEY"):
+        raise SystemExit("CURSOR_API_KEY is not configured.")
+    if shutil.which("cursor-agent") is None:
+        raise SystemExit("cursor-agent was not found in PATH.")
+    prompt_file = runner_temp() / "issue-agent-prompt.md"
+    prompt_file.write_text(build_prompt(), encoding="utf-8")
+    reply_path = Path(os.environ.get("ISSUE_REPLY_OUTPUT_PATH") or runner_temp() / "issue-agent-reply.md")
+    reply_path.unlink(missing_ok=True)
+    update_progress("agent_running")
+    print(f"Starting @agent {mode} for issue #{require_env('ISSUE_NUMBER')}...")
+    stop = threading.Event()
+    thread: threading.Thread | None = None
+    if mode == "go" and note_path() is not None:
+        thread = threading.Thread(target=poll_notes, args=(stop,), daemon=True)
+        thread.start()
+    status = agentlib.run_cursor_agent(prompt_file.read_text(encoding="utf-8"), model=agentlib.selected_model_id())
+    stop.set()
+    if thread is not None:
+        thread.join(timeout=1)
+    if status != 0:
+        print("cursor-agent failed.", file=sys.stderr)
+        raise SystemExit(status)
+    if mode != "plan":
+        return
+    if not reply_path.is_file() or reply_path.stat().st_size == 0:
+        raise SystemExit(f"Plan reply was not written to {reply_path}.")
+    update_progress("posting")
+    posted = reply_path.with_name(reply_path.name + ".posted")
+    posted.write_text(reply_path.read_text(encoding="utf-8") + agentlib.agent_footer("`@agent plan`"), encoding="utf-8")
+    agentlib.gh(
+        ["issue", "comment", require_env("ISSUE_NUMBER"), "--repo", require_env("REPOSITORY"), "--body-file", str(posted)]
+    )
+    print(f"Posted plan reply on issue #{require_env('ISSUE_NUMBER')}.")
 
 
 def substitute(text: str) -> str:
@@ -243,24 +268,7 @@ def substitute(text: str) -> str:
         "GO_NOTE_PATH": os.environ.get("GO_NOTE_PATH", ""),
         "GO_PR_BODY_PATH": os.environ.get("GO_PR_BODY_PATH", ""),
     }
-    keys = sorted(mapping, key=len, reverse=True)
-    parts: list[str] = []
-    index = 0
-    while index < len(text):
-        if text[index] == "$":
-            for key in keys:
-                token = f"${key}"
-                if text.startswith(token, index):
-                    parts.append(mapping[key])
-                    index += len(token)
-                    break
-            else:
-                parts.append(text[index])
-                index += 1
-        else:
-            parts.append(text[index])
-            index += 1
-    return "".join(parts)
+    return agentlib.substitute(text, mapping)
 
 
 def read_trigger_comment() -> str:
@@ -390,11 +398,14 @@ def progress_block(branch: str, pr_url: str, head: str, status: str) -> str:
     remaining_lines = "\n".join(f"- {item}" for item in remaining)
     blocker_lines = "\n".join(f"- {item}" for item in blockers)
     pr_text = pr_url or "未作成"
+    selected_model = agentlib.model_label()
+    model_line = f"- モデル: {selected_model}\n" if selected_model else ""
     return (
         "## 進捗\n\n"
         f"- ブランチ: `{branch}`\n"
         f"- PR: {pr_text}\n"
-        f"- HEAD: `{head}`\n\n"
+        f"- HEAD: `{head}`\n"
+        f"{model_line}\n"
         "### 未完了\n\n"
         f"{remaining_lines}\n\n"
         "### ブロック\n\n"
@@ -410,6 +421,9 @@ def record_comment(branch: str, pr_url: str, head: str, head_full: str, status: 
     if os.environ.get("OMITTED_WORKFLOWS") == "true":
         blockers = blockers.rstrip() + "\n\n- `.github/workflows/` の変更は Actions から push していない。workflow ファイルは手元で追加する。"
     pr_text = pr_url or "未作成"
+    selected_model = agentlib.model_label()
+    model_row = f"| モデル | {selected_model} |\n" if selected_model else ""
+    model_meta = f"model: {selected_model}\n" if selected_model else ""
     return (
         "## @agent go 実装記録\n\n"
         "| 項目 | 値 |\n"
@@ -417,6 +431,7 @@ def record_comment(branch: str, pr_url: str, head: str, head_full: str, status: 
         f"| ブランチ | `{branch}` |\n"
         f"| HEAD | `{head}` |\n"
         f"| PR | {pr_text} |\n"
+        f"{model_row}"
         "| 再開 | 次の `@agent go` は概要のチェックとこの記録、同じブランチから続ける |\n\n"
         "### ここまでできたこと\n\n"
         f"{done}\n\n"
@@ -428,6 +443,7 @@ def record_comment(branch: str, pr_url: str, head: str, head_full: str, status: 
         f"branch: {branch}\n"
         f"head_sha: {head_full}\n"
         f"pr_url: {pr_url}\n"
+        f"{model_meta}"
         "-->\n"
     )
 
@@ -485,11 +501,14 @@ def main() -> None:
     sub.add_parser("prompt", help="write the agent prompt to stdout")
     sub.add_parser("sync-record", help="update the Issue body and the progress comment")
     sub.add_parser("pr-body", help="write a Japanese pull request body to stdout")
+    sub.add_parser("run", help="run the plan or go agent and post a plan reply")
     args = parser.parse_args()
     if args.command == "progress":
         update_progress(args.stage)
     elif args.command == "poll":
         poll_notes()
+    elif args.command == "run":
+        run_agent()
     elif args.command == "prompt":
         sys.stdout.write(build_prompt())
     elif args.command == "sync-record":

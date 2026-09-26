@@ -12,6 +12,9 @@
 # Prompts: .github/workflows/prompts/issue-agent-{plan,go}.md
 #          + .cursor/issue-agent.md (optional)
 #
+# Model: Composer 2.5 chooses Composer 2.5 or Grok 4.7 medium from the
+# issue contents. Avoid "auto" — it may route to other premium models.
+#
 # Requires repository secret: CURSOR_API_KEY
 # See https://cursor.com/docs/cli/github-actions
 
@@ -81,13 +84,13 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             "repos/$REPOSITORY/issues/comments/$COMMENT_ID/reactions" \
             -f content='eyes' >/dev/null
-          bash .github/scripts/issue-agent-progress.sh received
+          python3 .github/scripts/issue_agent.py progress received
 
       - name: Progress — issue context loaded
         if: steps.parse.outputs.invalid != 'true'
         env:
           AGENT_MODE: ${{ steps.parse.outputs.mode }}
-        run: bash .github/scripts/issue-agent-progress.sh issue_loaded
+        run: python3 .github/scripts/issue_agent.py progress issue_loaded
 
       - name: Resolve default branch
         if: steps.parse.outputs.invalid != 'true'
@@ -108,7 +111,14 @@ jobs:
         if: steps.parse.outputs.invalid != 'true'
         env:
           AGENT_MODE: ${{ steps.parse.outputs.mode }}
-        run: bash .github/scripts/issue-agent-progress.sh checked_out
+        run: python3 .github/scripts/issue_agent.py progress checked_out
+
+      - name: Preserve model router
+        if: steps.parse.outputs.invalid != 'true'
+        run: |
+          set -euo pipefail
+          cp .github/scripts/agentlib.py "$RUNNER_TEMP/agentlib.py"
+          echo "AGENTLIB=$RUNNER_TEMP/agentlib.py" >> "$GITHUB_ENV"
 
       - name: Prepare work branch (go)
         if: steps.parse.outputs.invalid != 'true' && steps.parse.outputs.mode == 'go'
@@ -121,8 +131,7 @@ jobs:
           # Resume checks out an older branch that may not contain the current
           # publish script or go prompt. Keep the default-branch copies.
           mkdir -p "$RUNNER_TEMP/go-tools/scripts" "$RUNNER_TEMP/go-tools/prompts"
-          cp .github/scripts/cursor-issue-agent.sh "$RUNNER_TEMP/go-tools/scripts/"
-          cp .github/scripts/issue-agent-progress.sh "$RUNNER_TEMP/go-tools/scripts/"
+          cp .github/scripts/agentlib.py "$RUNNER_TEMP/go-tools/scripts/"
           cp .github/scripts/issue_agent.py "$RUNNER_TEMP/go-tools/scripts/"
           cp .github/scripts/publish-go.sh "$RUNNER_TEMP/go-tools/scripts/"
           cp .github/workflows/prompts/issue-agent-go.md "$RUNNER_TEMP/go-tools/prompts/"
@@ -132,8 +141,8 @@ jobs:
           bash .github/scripts/prepare-go-branch.sh
           # shellcheck disable=SC1091
           source "${RUNNER_TEMP}/go-branch.env"
-          echo "ISSUE_AGENT_PROGRESS_SH=$RUNNER_TEMP/go-tools/scripts/issue-agent-progress.sh" >> "$GITHUB_ENV"
-          BRANCH_NAME="$WORK_BRANCH" bash "$RUNNER_TEMP/go-tools/scripts/issue-agent-progress.sh" branch_ready
+          echo "ISSUE_AGENT_PY=$RUNNER_TEMP/go-tools/scripts/issue_agent.py" >> "$GITHUB_ENV"
+          BRANCH_NAME="$WORK_BRANCH" python3 "$RUNNER_TEMP/go-tools/scripts/issue_agent.py" progress branch_ready
 
       - name: Install Cursor CLI
         if: steps.parse.outputs.invalid != 'true'
@@ -149,7 +158,23 @@ jobs:
           AGENT_MODE: ${{ steps.parse.outputs.mode }}
           WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
           BRANCH_NAME: ${{ steps.branch.outputs.work_branch }}
-        run: bash "${ISSUE_AGENT_PROGRESS_SH:-.github/scripts/issue-agent-progress.sh}" cli_ready
+        run: python3 "${ISSUE_AGENT_PY:-.github/scripts/issue_agent.py}" progress cli_ready
+
+      - name: Select agent model
+        if: steps.parse.outputs.invalid != 'true'
+        timeout-minutes: 8
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          ROUTER_TASK: ${{ steps.parse.outputs.mode }}
+        run: python3 "$AGENTLIB" select-model
+
+      - name: Progress — model selected
+        if: steps.parse.outputs.invalid != 'true'
+        env:
+          AGENT_MODE: ${{ steps.parse.outputs.mode }}
+          WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
+          BRANCH_NAME: ${{ steps.branch.outputs.work_branch }}
+        run: python3 "${ISSUE_AGENT_PY:-.github/scripts/issue_agent.py}" progress cli_ready
 
       - name: Run @agent plan
         if: steps.parse.outputs.invalid != 'true' && steps.parse.outputs.mode == 'plan'
@@ -157,15 +182,14 @@ jobs:
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           AGENT_MODE: plan
-          MODEL: composer-2.5[fast=false]
           ISSUE_REPLY_OUTPUT_PATH: ${{ runner.temp }}/issue-agent-reply.md
-        run: bash .github/scripts/cursor-issue-agent.sh
+        run: python3 .github/scripts/issue_agent.py run
 
       - name: Progress — plan completed
         if: success() && steps.parse.outputs.mode == 'plan'
         env:
           AGENT_MODE: plan
-        run: bash .github/scripts/issue-agent-progress.sh completed
+        run: python3 .github/scripts/issue_agent.py progress completed
 
       - name: Run @agent go
         id: go_agent
@@ -175,7 +199,6 @@ jobs:
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           AGENT_MODE: go
-          MODEL: composer-2.5[fast=false]
           DEFAULT_BRANCH: ${{ steps.repo.outputs.default_branch }}
           WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
           GO_RESUMED: ${{ steps.branch.outputs.resumed }}
@@ -185,7 +208,7 @@ jobs:
           AGENT_NOTE_PATH: ${{ runner.temp }}/go-note.md
           PROMPT_TEMPLATE_PATH: ${{ runner.temp }}/go-tools/prompts/issue-agent-go.md
           PROJECT_CONTEXT_PATH: ${{ runner.temp }}/go-tools/issue-agent.md
-        run: bash "$RUNNER_TEMP/go-tools/scripts/cursor-issue-agent.sh"
+        run: python3 "$ISSUE_AGENT_PY" run
 
       - name: Publish branch, pull request, and implementation record
         if: steps.parse.outputs.invalid != 'true' && steps.parse.outputs.mode == 'go'
@@ -199,7 +222,7 @@ jobs:
           AGENT_NOTE_PATH: ${{ runner.temp }}/go-note.md
         run: |
           set -euo pipefail
-          bash "${ISSUE_AGENT_PROGRESS_SH:-.github/scripts/issue-agent-progress.sh}" publishing
+          python3 "${ISSUE_AGENT_PY:-.github/scripts/issue_agent.py}" progress publishing
           bash "$RUNNER_TEMP/go-tools/scripts/publish-go.sh"
 
       - name: Fail when go agent did not finish
@@ -213,7 +236,7 @@ jobs:
           WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
           BRANCH_NAME: ${{ steps.branch.outputs.work_branch }}
           AGENT_NOTE_PATH: ${{ runner.temp }}/go-note.md
-        run: bash "${ISSUE_AGENT_PROGRESS_SH:-.github/scripts/issue-agent-progress.sh}" completed
+        run: python3 "${ISSUE_AGENT_PY:-.github/scripts/issue_agent.py}" progress completed
 
       - name: Report failure on issue
         if: failure() && steps.parse.outputs.invalid != 'true'
@@ -225,6 +248,6 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -f "$RUNNER_TEMP/issue-agent-progress-comment-id" ]]; then
-            bash "${ISSUE_AGENT_PROGRESS_SH:-.github/scripts/issue-agent-progress.sh}" failed || true
+            python3 "${ISSUE_AGENT_PY:-.github/scripts/issue_agent.py}" progress failed || true
           fi
           gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body "⚠️ \`@agent ${AGENT_MODE}\` を完了できませんでした。進捗コメントと [ワークフロー実行]($RUN_URL) を確認してください。"
