@@ -143,7 +143,7 @@ jobs:
           PR_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
         run: python3 "$AGENTLIB" progress pr cli_ready
 
-      - name: Run review and post PR comment
+      - name: Run review and post pull request review
         timeout-minutes: 20
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
