@@ -262,7 +262,3 @@ class EditError(LayoutYamlError): ...        # 存在しないキー削除など
 - アンカー解決を伴う意味論的マージ
 
 対応範囲の一覧は `docs/SUPPORT.md` を正とする。
-
-## 8. 実装タスクと着手順
-
-実装の依存関係と着手順の正本は [GitHub Issues](https://github.com/uttne/layout-yaml/issues) の各 Issue 本文（**依存** セクション）である。本ドキュメントには進捗や Issue 一覧を書かない。
