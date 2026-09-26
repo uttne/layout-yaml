@@ -15,6 +15,7 @@
 - 再開: `$GO_RESUMED`（`true` なら既存の実装の続き）
 - 実装記録の出力先: `$GO_STATUS_PATH`
 - 途中経過の出力先: `$GO_NOTE_PATH`（最新の1行。Issue には投稿しない）
+- PR 本文の出力先: `$GO_PR_BODY_PATH`（日本語。Issue や PR は自分で更新しない）
 
 ## 会話と進捗の読み方
 
@@ -22,7 +23,7 @@
 
 Issue 本文と全コメントを時系列で読む。`@agent` が無い人間のコメントも決定として扱う。同じ論点は、より新しい人間の発言を正とする。
 
-**実装の続きは、コメント `## @agent go 実装記録`（`layout-yaml-agent-go`）と、このブランチの git log / 作業ツリーを正とする。** 記録に「できた」とあり、ツリーにもあるものはやり直さない。記録の「まだ残っていること」と、今回の依頼コメントから、未完了だけを実装する。
+**実装の続きは、Issue 概要のタスクチェック、コメント `## @agent go 実装記録`（`layout-yaml-agent-go`）、このブランチの git log / 作業ツリーを正とする。** 概要で完了になっていて、記録とツリーにもあるものはやり直さない。概要の未完了、記録の「まだ残っていること」、今回の依頼コメントから、未完了だけを実装する。
 
 ## やること
 
@@ -31,10 +32,8 @@ Issue 本文と全コメントを時系列で読む。`@agent` が無い人間�
 3. 適切なら `uv run pytest`、`uv run ruff check .` を実行する（pyproject が無い段階ではスキップ可）。
 4. 変更を commit する。メッセージは依頼者の指定があればそれに従い、なければ `(#$ISSUE_NUMBER)` を含める。
 5. `git push -u origin "$WORK_BRANCH"` する。
-6. 同じ head の PR が無ければ作成する。`pull-requests: write` があるので **`gh pr create` は使える。** PR 作成が禁止されている、とは書かない。
-   - `gh pr create --repo "$REPOSITORY" --base "$DEFAULT_BRANCH" --head "$WORK_BRANCH" --title "<Issue タイトル>" --body "Closes #$ISSUE_NUMBER"`
-   - 既にある PR は再利用し、本文に `Closes #$ISSUE_NUMBER` が無ければ足す。
-7. 実装記録を `$GO_STATUS_PATH` に書く（Issue への投稿はワークフローが行う。自分では進捗コメントを投稿しない）。
+6. PR は作らない。日本語の PR 本文を `$GO_PR_BODY_PATH` に書く。ワークフローが PR の作成または本文の更新を行う。
+7. 実装記録を `$GO_STATUS_PATH` に書く。Issue 概要とコメントへの反映はワークフローが行う。自分では Issue 本文もコメントも更新しない。
 
 ## 途中経過
 
@@ -59,6 +58,28 @@ Issue 本文と全コメントを時系列で読む。`@agent` が無い人間�
 ### まだ残っていること
 
 - （無ければ「なし」）
+
+### ブロック・エラー
+
+- （無ければ「なし」。失敗したコマンド、拒否された push、未作成の理由を書く）
+
+### 完了したタスク
+
+- （Issue 概要の「## タスク」で終えた行から、他の行と重ならない短い文言を1行ずつ。例: `pyproject.toml`）
+```
+
+PR 本文（`$GO_PR_BODY_PATH`）は日本語だけにする。
+
+```markdown
+## 概要
+
+- （この PR で入る変更を短く）
+
+## 確認
+
+- （実行した確認）
+
+Closes #$ISSUE_NUMBER
 ```
 
 ## 禁止

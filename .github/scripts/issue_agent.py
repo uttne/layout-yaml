@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 import time
@@ -172,7 +173,7 @@ def gh_api(method: str, url: str, body: str, jq: str | None = None) -> str:
     ]
     if jq:
         command.extend(["--jq", jq])
-    result = subprocess.run(command, check=False, text=True, capture_output=True)
+    result = subprocess.run(command, check=False, text=True, encoding="utf-8", errors="replace", capture_output=True)
     if result.returncode != 0:
         sys.stderr.write(result.stderr)
         raise SystemExit(result.returncode)
@@ -240,6 +241,7 @@ def substitute(text: str) -> str:
         "GO_RESUMED": os.environ.get("GO_RESUMED", "false"),
         "GO_STATUS_PATH": os.environ.get("GO_STATUS_PATH", ""),
         "GO_NOTE_PATH": os.environ.get("GO_NOTE_PATH", ""),
+        "GO_PR_BODY_PATH": os.environ.get("GO_PR_BODY_PATH", ""),
     }
     keys = sorted(mapping, key=len, reverse=True)
     parts: list[str] = []
@@ -305,6 +307,175 @@ def build_prompt() -> str:
     return prompt
 
 
+def gh_out(args: list[str]) -> str:
+    result = subprocess.run(["gh", *args], check=False, text=True, encoding="utf-8", errors="replace", capture_output=True)
+    if result.returncode != 0:
+        sys.stderr.write(result.stderr)
+        raise SystemExit(result.returncode)
+    return result.stdout
+
+
+def parse_sections(text: str) -> dict[str, str]:
+    matches = list(re.finditer(r"^### (.+)$", text, re.M))
+    sections: dict[str, str] = {}
+    for index, match in enumerate(matches):
+        start = match.end()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        sections[match.group(1).strip()] = text[start:end].strip()
+    return sections
+
+
+def section_items(text: str) -> list[str]:
+    items: list[str] = []
+    for line in text.splitlines():
+        match = re.match(r"^\s*[-*]\s+(?:\[[ xX]\]\s+)?(.*)$", line)
+        if match and match.group(1).strip():
+            items.append(match.group(1).strip())
+    return items
+
+
+def mark_task_section(section: str, phrases: list[str]) -> str:
+    if not phrases:
+        return section
+    cleaned = [phrase.replace("`", "").strip() for phrase in phrases if phrase.strip()]
+    lines: list[str] = []
+    for line in section.splitlines():
+        match = re.match(r"^(\s*)([-*])\s+(?:\[[ xX]\]\s+)?(.*)$", line)
+        if not match:
+            lines.append(line)
+            continue
+        content = match.group(3).strip()
+        plain = content.replace("`", "")
+        already = "[x]" in line.lower() or "[X]" in line
+        done = already or any(phrase in plain for phrase in cleaned)
+        lines.append(f"{match.group(1)}- [{'x' if done else ' '}] {content}")
+    return "\n".join(lines)
+
+
+def replace_h2(body: str, heading: str, block: str) -> str:
+    pattern = re.compile(rf"^## {re.escape(heading)}\n.*?(?=^## |\Z)", re.M | re.S)
+    replacement = block.rstrip() + "\n\n"
+    if pattern.search(body):
+        return pattern.sub(replacement, body, count=1)
+    marker = "## 参照"
+    if marker in body:
+        return body.replace(marker, replacement + marker, 1)
+    return body.rstrip() + "\n\n" + replacement
+
+
+def task_section_span(body: str) -> tuple[int, int] | None:
+    match = re.search(r"^## タスク\n.*?(?=^## |\Z)", body, re.M | re.S)
+    if not match:
+        return None
+    return match.start(), match.end()
+
+
+def apply_issue_body(body: str, status: str, progress_block: str) -> str:
+    sections = parse_sections(status)
+    phrases = section_items(sections.get("完了したタスク", ""))
+    span = task_section_span(body)
+    if span and phrases:
+        start, end = span
+        heading, _, rest = body[start:end].partition("\n")
+        body = body[:start] + heading + "\n" + mark_task_section(rest, phrases).rstrip() + "\n\n" + body[end:]
+    return replace_h2(body, "進捗", progress_block)
+
+
+def progress_block(branch: str, pr_url: str, head: str, status: str) -> str:
+    sections = parse_sections(status)
+    remaining = section_items(sections.get("まだ残っていること", "")) or ["（未記録）"]
+    blockers = section_items(sections.get("ブロック・エラー", "")) or ["なし"]
+    if os.environ.get("OMITTED_WORKFLOWS") == "true":
+        blockers.append("`.github/workflows/` の変更は Actions から push していない。workflow ファイルは手元で追加する。")
+    remaining_lines = "\n".join(f"- {item}" for item in remaining)
+    blocker_lines = "\n".join(f"- {item}" for item in blockers)
+    pr_text = pr_url or "未作成"
+    return (
+        "## 進捗\n\n"
+        f"- ブランチ: `{branch}`\n"
+        f"- PR: {pr_text}\n"
+        f"- HEAD: `{head}`\n\n"
+        "### 未完了\n\n"
+        f"{remaining_lines}\n\n"
+        "### ブロック\n\n"
+        f"{blocker_lines}\n"
+    )
+
+
+def record_comment(branch: str, pr_url: str, head: str, head_full: str, status: str) -> str:
+    sections = parse_sections(status)
+    done = sections.get("ここまでできたこと", "（未記録）")
+    remaining = sections.get("まだ残っていること", "（未記録）")
+    blockers = sections.get("ブロック・エラー", "なし")
+    if os.environ.get("OMITTED_WORKFLOWS") == "true":
+        blockers = blockers.rstrip() + "\n\n- `.github/workflows/` の変更は Actions から push していない。workflow ファイルは手元で追加する。"
+    pr_text = pr_url or "未作成"
+    return (
+        "## @agent go 実装記録\n\n"
+        "| 項目 | 値 |\n"
+        "| --- | --- |\n"
+        f"| ブランチ | `{branch}` |\n"
+        f"| HEAD | `{head}` |\n"
+        f"| PR | {pr_text} |\n"
+        "| 再開 | 次の `@agent go` は概要のチェックとこの記録、同じブランチから続ける |\n\n"
+        "### ここまでできたこと\n\n"
+        f"{done}\n\n"
+        "### まだ残っていること\n\n"
+        f"{remaining}\n\n"
+        "### ブロック・エラー\n\n"
+        f"{blockers}\n\n"
+        "<!-- layout-yaml-agent-go\n"
+        f"branch: {branch}\n"
+        f"head_sha: {head_full}\n"
+        f"pr_url: {pr_url}\n"
+        "-->\n"
+    )
+
+
+def japanese_pr_body(issue: str, status: str) -> str:
+    path = os.environ.get("GO_PR_BODY_PATH", "")
+    if path and Path(path).is_file() and Path(path).stat().st_size > 0:
+        return Path(path).read_text(encoding="utf-8")
+    sections = parse_sections(status)
+    done = section_items(sections.get("ここまでできたこと", ""))
+    if not done:
+        done = ["（実装記録を参照）"]
+    lines = "\n".join(f"- {item}" for item in done)
+    return f"## 概要\n\n{lines}\n\n## 確認\n\n- Issue #{issue} の合格基準\n\nCloses #{issue}\n"
+
+
+def sync_record() -> None:
+    repository = require_env("REPOSITORY")
+    issue = require_env("ISSUE_NUMBER")
+    branch = require_env("WORK_BRANCH")
+    status_path = Path(os.environ.get("GO_STATUS_PATH") or runner_temp() / "go-status.md")
+    status = status_path.read_text(encoding="utf-8") if status_path.is_file() else ""
+    head_full = os.environ.get("HEAD_SHA", "")
+    head = head_full[:7] if head_full else ""
+    pr_url = os.environ.get("PR_URL", "")
+    body = gh_out(["issue", "view", issue, "--repo", repository, "--json", "body", "--jq", ".body"])
+    updated = apply_issue_body(body, status, progress_block(branch, pr_url, head, status))
+    body_path = runner_temp() / "issue-body.md"
+    body_path.write_text(updated, encoding="utf-8")
+    gh_out(["issue", "edit", issue, "--repo", repository, "--body-file", str(body_path)])
+    comment = record_comment(branch, pr_url, head, head_full, status)
+    ids = gh_out(
+        [
+            "api",
+            "--paginate",
+            f"repos/{repository}/issues/{issue}/comments",
+            "--jq",
+            '.[] | select(.body | contains("layout-yaml-agent-go")) | .id',
+        ]
+    ).split()
+    if ids:
+        gh_api("PATCH", f"repos/{repository}/issues/comments/{ids[-1]}", comment)
+        print(f"Updated go progress comment {ids[-1]}.")
+    else:
+        gh_api("POST", f"repos/{repository}/issues/{issue}/comments", comment)
+        print("Posted go progress comment.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -312,6 +483,8 @@ def main() -> None:
     progress.add_argument("stage")
     sub.add_parser("poll", help="watch the note file and refresh the checkpoint comment")
     sub.add_parser("prompt", help="write the agent prompt to stdout")
+    sub.add_parser("sync-record", help="update the Issue body and the progress comment")
+    sub.add_parser("pr-body", help="write a Japanese pull request body to stdout")
     args = parser.parse_args()
     if args.command == "progress":
         update_progress(args.stage)
@@ -319,6 +492,13 @@ def main() -> None:
         poll_notes()
     elif args.command == "prompt":
         sys.stdout.write(build_prompt())
+    elif args.command == "sync-record":
+        sync_record()
+    elif args.command == "pr-body":
+        issue = require_env("ISSUE_NUMBER")
+        status_path = Path(os.environ.get("GO_STATUS_PATH") or "")
+        status = status_path.read_text(encoding="utf-8") if status_path.is_file() else ""
+        sys.stdout.write(japanese_pr_body(issue, status))
 
 
 if __name__ == "__main__":

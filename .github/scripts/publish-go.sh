@@ -51,60 +51,31 @@ omit_workflow_commits() {
   fi
 }
 
-upsert_progress_comment() {
-  local head_sha head_short pr_url status_body body comment_id
-  head_sha="$(git rev-parse HEAD)"
-  head_short="${head_sha:0:7}"
-  pr_url="$(
-    gh pr list --repo "$REPOSITORY" --head "$WORK_BRANCH" --json url --jq '.[0].url // empty'
-  )"
-
-  if [[ -s "$GO_STATUS_PATH" ]]; then
-    status_body="$(cat "$GO_STATUS_PATH")"
-  else
-    status_body=$'### ここまでできたこと\n\n（エージェントの記録ファイルが無いため、ブランチのコミットを確認してください）\n\n### まだ残っていること\n\n（未記録）'
+sync_issue_record() {
+  local pr_url="$1"
+  local create_pr="$2"
+  local here pr_body_file
+  here=$(cd "$(dirname "$0")" && pwd)
+  pr_body_file="${RUNNER_TEMP}/pr-body.md"
+  python3 "$here/issue_agent.py" pr-body > "$pr_body_file"
+  if [[ -z "$pr_url" && "$create_pr" == "true" ]]; then
+    title="$(gh issue view "$ISSUE_NUMBER" --repo "$REPOSITORY" --json title --jq .title)"
+    gh pr create \
+      --repo "$REPOSITORY" \
+      --base "$DEFAULT_BRANCH" \
+      --head "$WORK_BRANCH" \
+      --title "$title" \
+      --body-file "$pr_body_file"
+    pr_url="$(
+      gh pr list --repo "$REPOSITORY" --head "$WORK_BRANCH" --json url --jq '.[0].url // empty'
+    )"
+  elif [[ -n "$pr_url" ]]; then
+    gh pr edit "$pr_url" --repo "$REPOSITORY" --body-file "$pr_body_file"
   fi
-
-  if [[ "$omitted_workflows" == "true" ]]; then
-    status_body+=$'\n\n- `.github/workflows/` の変更は Actions から push していない。workflow ファイルは手元で追加する。'
-  fi
-
-  body="$(cat <<EOF
-## @agent go 実装記録
-
-| 項目 | 値 |
-| --- | --- |
-| ブランチ | \`${WORK_BRANCH}\` |
-| HEAD | \`${head_short}\` |
-| PR | ${pr_url:-未作成} |
-| 再開 | 次の \`@agent go\` はこのブランチの続きから行う |
-
-${status_body}
-
-<!-- layout-yaml-agent-go
-branch: ${WORK_BRANCH}
-head_sha: ${head_sha}
-pr_url: ${pr_url}
--->
-EOF
-)"
-
-  comment_id="$(
-    gh api --paginate "repos/$REPOSITORY/issues/$ISSUE_NUMBER/comments" \
-      --jq '.[] | select(.body | contains("layout-yaml-agent-go")) | .id' \
-      | tail -n 1 \
-      || true
-  )"
-
-  if [[ -n "$comment_id" ]]; then
-    gh api --method PATCH \
-      "repos/$REPOSITORY/issues/comments/$comment_id" \
-      -f body="$body" >/dev/null
-    echo "Updated go progress comment $comment_id."
-  else
-    gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body "$body" >/dev/null
-    echo "Posted go progress comment."
-  fi
+  PR_URL="$pr_url" \
+    HEAD_SHA="$(git rev-parse HEAD)" \
+    OMITTED_WORKFLOWS="$omitted_workflows" \
+    python3 "$here/issue_agent.py" sync-record
 }
 
 git fetch origin "$DEFAULT_BRANCH"
@@ -113,8 +84,11 @@ omit_workflow_commits
 
 ahead="$(git rev-list --count "origin/${DEFAULT_BRANCH}..HEAD")"
 if [[ "$ahead" == "0" ]]; then
-  echo "No commits ahead of ${DEFAULT_BRANCH}; skip push and pull request."
-  upsert_progress_comment
+  echo "No commits ahead of ${DEFAULT_BRANCH}; skip push."
+  pr_url="$(
+    gh pr list --repo "$REPOSITORY" --head "$WORK_BRANCH" --json url --jq '.[0].url // empty'
+  )"
+  sync_issue_record "$pr_url" false
   exit 0
 fi
 
@@ -123,14 +97,4 @@ git push -u origin "HEAD:${WORK_BRANCH}"
 pr_url="$(
   gh pr list --repo "$REPOSITORY" --head "$WORK_BRANCH" --json url --jq '.[0].url // empty'
 )"
-if [[ -z "$pr_url" ]]; then
-  title="$(gh issue view "$ISSUE_NUMBER" --repo "$REPOSITORY" --json title --jq .title)"
-  gh pr create \
-    --repo "$REPOSITORY" \
-    --base "$DEFAULT_BRANCH" \
-    --head "$WORK_BRANCH" \
-    --title "$title" \
-    --body "$(printf 'Closes #%s\n' "$ISSUE_NUMBER")"
-fi
-
-upsert_progress_comment
+sync_issue_record "$pr_url" true

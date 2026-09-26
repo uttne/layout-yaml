@@ -181,6 +181,7 @@ jobs:
           GO_RESUMED: ${{ steps.branch.outputs.resumed }}
           GO_STATUS_PATH: ${{ runner.temp }}/go-status.md
           GO_NOTE_PATH: ${{ runner.temp }}/go-note.md
+          GO_PR_BODY_PATH: ${{ runner.temp }}/go-pr-body.md
           AGENT_NOTE_PATH: ${{ runner.temp }}/go-note.md
           PROMPT_TEMPLATE_PATH: ${{ runner.temp }}/go-tools/prompts/issue-agent-go.md
           PROJECT_CONTEXT_PATH: ${{ runner.temp }}/go-tools/issue-agent.md
@@ -194,6 +195,7 @@ jobs:
           WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
           BRANCH_NAME: ${{ steps.branch.outputs.work_branch }}
           GO_STATUS_PATH: ${{ runner.temp }}/go-status.md
+          GO_PR_BODY_PATH: ${{ runner.temp }}/go-pr-body.md
           AGENT_NOTE_PATH: ${{ runner.temp }}/go-note.md
         run: |
           set -euo pipefail

@@ -65,7 +65,7 @@ Issue を `@agent` で進める場合:
 3. **必要なら会話を続ける** — 同じ Issue にコメントし、再度 `@agent` を付ける。
 4. **`@agent sync`** — 合意内容を Issue **概要**に統合。Agent は **同期記録**コメント（どの comment id まで反映したか）を残す。
 5. **人間が概要を確認** — 必要なら Issue 概要を手 edit、または `@agent sync` を再実行。
-6. **`@agent go`** — 実装・push・PR 作成（`Closes #N`）。ブランチは `agent/issue-N`（既存があればその続き）。Issue の **`@agent go 実装記録`** に、できたことと残りを残す。もう一度 `@agent go` するとその記録とブランチから再開する。`.github/workflows/` は Actions から push しない。
+6. **`@agent go`** — 実装・push・PR 作成（`Closes #N`、PR 本文は日本語）。ブランチは `agent/issue-N`（既存があればその続き）。Issue **概要**のタスクチェックと「進捗」を更新し、コメント **`@agent go 実装記録`** にできたこと・残り・ブロックを残す。もう一度 `@agent go` すると概要のチェック、その記録、同じブランチから再開する。`.github/workflows/` は Actions から push しない。
 7. **PR レビュー** — 人間、または PR 上で `@agent`（[cursor-pr-review.yml](.github/workflows/cursor-pr-review.yml)）。
 8. **マージ** — Issue は PR の `Closes #N` で Close。
 
