@@ -16,10 +16,13 @@ if [[ -z "$body" ]]; then
   exit 1
 fi
 
-# First @agent on its own line: empty token and "plan" are plan; "go" is go.
+# Subcommand is the first word on the same line as @agent.
+# [[:blank:]] is space/tab only, so a newline does not pull the next
+# paragraph in as a subcommand (`@agent` then `PR ...` stays plan).
+# Empty token and "plan" are plan; "go" is go.
 mode=""
 token=""
-if [[ "$body" =~ @agent[[:space:]]*([A-Za-z0-9_]*) ]]; then
+if [[ "$body" =~ @agent[[:blank:]]*([A-Za-z0-9_]*) ]]; then
   token="${BASH_REMATCH[1],,}"
 fi
 
