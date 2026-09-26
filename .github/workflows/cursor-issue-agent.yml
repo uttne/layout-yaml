@@ -122,6 +122,8 @@ jobs:
           # publish script or go prompt. Keep the default-branch copies.
           mkdir -p "$RUNNER_TEMP/go-tools/scripts" "$RUNNER_TEMP/go-tools/prompts"
           cp .github/scripts/cursor-issue-agent.sh "$RUNNER_TEMP/go-tools/scripts/"
+          cp .github/scripts/issue-agent-progress.sh "$RUNNER_TEMP/go-tools/scripts/"
+          cp .github/scripts/issue_agent.py "$RUNNER_TEMP/go-tools/scripts/"
           cp .github/scripts/publish-go.sh "$RUNNER_TEMP/go-tools/scripts/"
           cp .github/workflows/prompts/issue-agent-go.md "$RUNNER_TEMP/go-tools/prompts/"
           if [[ -f .cursor/issue-agent.md ]]; then
@@ -130,7 +132,8 @@ jobs:
           bash .github/scripts/prepare-go-branch.sh
           # shellcheck disable=SC1091
           source "${RUNNER_TEMP}/go-branch.env"
-          BRANCH_NAME="$WORK_BRANCH" bash .github/scripts/issue-agent-progress.sh branch_ready
+          echo "ISSUE_AGENT_PROGRESS_SH=$RUNNER_TEMP/go-tools/scripts/issue-agent-progress.sh" >> "$GITHUB_ENV"
+          BRANCH_NAME="$WORK_BRANCH" bash "$RUNNER_TEMP/go-tools/scripts/issue-agent-progress.sh" branch_ready
 
       - name: Install Cursor CLI
         if: steps.parse.outputs.invalid != 'true'
@@ -146,7 +149,7 @@ jobs:
           AGENT_MODE: ${{ steps.parse.outputs.mode }}
           WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
           BRANCH_NAME: ${{ steps.branch.outputs.work_branch }}
-        run: bash .github/scripts/issue-agent-progress.sh cli_ready
+        run: bash "${ISSUE_AGENT_PROGRESS_SH:-.github/scripts/issue-agent-progress.sh}" cli_ready
 
       - name: Run @agent plan
         if: steps.parse.outputs.invalid != 'true' && steps.parse.outputs.mode == 'plan'
@@ -177,6 +180,8 @@ jobs:
           WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
           GO_RESUMED: ${{ steps.branch.outputs.resumed }}
           GO_STATUS_PATH: ${{ runner.temp }}/go-status.md
+          GO_NOTE_PATH: ${{ runner.temp }}/go-note.md
+          AGENT_NOTE_PATH: ${{ runner.temp }}/go-note.md
           PROMPT_TEMPLATE_PATH: ${{ runner.temp }}/go-tools/prompts/issue-agent-go.md
           PROJECT_CONTEXT_PATH: ${{ runner.temp }}/go-tools/issue-agent.md
         run: bash "$RUNNER_TEMP/go-tools/scripts/cursor-issue-agent.sh"
@@ -189,9 +194,10 @@ jobs:
           WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
           BRANCH_NAME: ${{ steps.branch.outputs.work_branch }}
           GO_STATUS_PATH: ${{ runner.temp }}/go-status.md
+          AGENT_NOTE_PATH: ${{ runner.temp }}/go-note.md
         run: |
           set -euo pipefail
-          bash .github/scripts/issue-agent-progress.sh publishing
+          bash "${ISSUE_AGENT_PROGRESS_SH:-.github/scripts/issue-agent-progress.sh}" publishing
           bash "$RUNNER_TEMP/go-tools/scripts/publish-go.sh"
 
       - name: Fail when go agent did not finish
@@ -204,7 +210,8 @@ jobs:
           AGENT_MODE: go
           WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
           BRANCH_NAME: ${{ steps.branch.outputs.work_branch }}
-        run: bash .github/scripts/issue-agent-progress.sh completed
+          AGENT_NOTE_PATH: ${{ runner.temp }}/go-note.md
+        run: bash "${ISSUE_AGENT_PROGRESS_SH:-.github/scripts/issue-agent-progress.sh}" completed
 
       - name: Report failure on issue
         if: failure() && steps.parse.outputs.invalid != 'true'
@@ -212,9 +219,10 @@ jobs:
           AGENT_MODE: ${{ steps.parse.outputs.mode }}
           WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
           BRANCH_NAME: ${{ steps.branch.outputs.work_branch }}
+          AGENT_NOTE_PATH: ${{ runner.temp }}/go-note.md
         run: |
           set -euo pipefail
           if [[ -f "$RUNNER_TEMP/issue-agent-progress-comment-id" ]]; then
-            bash .github/scripts/issue-agent-progress.sh failed || true
+            bash "${ISSUE_AGENT_PROGRESS_SH:-.github/scripts/issue-agent-progress.sh}" failed || true
           fi
           gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body "⚠️ \`@agent ${AGENT_MODE}\` を完了できませんでした。進捗コメントと [ワークフロー実行]($RUN_URL) を確認してください。"

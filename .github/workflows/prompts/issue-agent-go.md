@@ -14,6 +14,7 @@
 - ベースブランチ: `$DEFAULT_BRANCH`
 - 再開: `$GO_RESUMED`（`true` なら既存の実装の続き）
 - 実装記録の出力先: `$GO_STATUS_PATH`
+- 途中経過の出力先: `$GO_NOTE_PATH`（最新の1行。Issue には投稿しない）
 
 ## 会話と進捗の読み方
 
@@ -34,6 +35,19 @@ Issue 本文と全コメントを時系列で読む。`@agent` が無い人間�
    - `gh pr create --repo "$REPOSITORY" --base "$DEFAULT_BRANCH" --head "$WORK_BRANCH" --title "<Issue タイトル>" --body "Closes #$ISSUE_NUMBER"`
    - 既にある PR は再利用し、本文に `Closes #$ISSUE_NUMBER` が無ければ足す。
 7. 実装記録を `$GO_STATUS_PATH` に書く（Issue への投稿はワークフローが行う。自分では進捗コメントを投稿しない）。
+
+## 途中経過
+
+作業の区切りで `$GO_NOTE_PATH` を**最新の1行で上書き**する。追記しない。ワークフローが約30秒ごとに内容の変化を見て、同じ進捗コメントの「いまの作業」を更新する。
+
+次のタイミングで書く。
+
+- Issue とブランチの現状を把握した直後
+- 実装に入る直前
+- テストを実行する直前
+- commit または push の直前
+
+1行、80文字程度。秘密情報は書かない。例: `printf '%s\n' 'テストを実行する' > "$GO_NOTE_PATH"`
 
 ## 実装記録（`$GO_STATUS_PATH` にこの形だけ）
 
