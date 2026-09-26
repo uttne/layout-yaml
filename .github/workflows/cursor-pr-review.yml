@@ -10,6 +10,9 @@
 # See https://cursor.com/docs/cli/github-actions
 #
 # Model: composer-2.5 (non-fast). Avoid "auto" — it may route to premium models.
+#
+# Trigger auth: only the repository owner (uttne) may invoke @agent. Public repos
+# cannot restrict who may comment on issues/PRs to a single user at the GitHub level.
 
 name: Cursor PR review (@agent)
 
@@ -27,7 +30,7 @@ jobs:
     if: >-
       github.event.issue.pull_request &&
       contains(github.event.comment.body, '@agent') &&
-      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+      github.event.comment.user.login == github.repository_owner
     runs-on: ubuntu-latest
     timeout-minutes: 30
     concurrency:
