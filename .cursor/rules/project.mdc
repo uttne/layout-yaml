@@ -8,7 +8,7 @@ alwaysApply: true
 レイアウト維持 YAML エディタ。人間が書いた YAML を局所編集し diff を小さく保つ。
 
 - **入口**: `AGENTS.md`（進捗・再開手順）、`docs/DESIGN.md`（仕様）、`docs/ISSUES.md`（タスク）
-- **現状**: 設計とゴールデンのみ。`src/` 未実装。次は Issue #4（uv 雛形）
+- **現状**: 設計・ゴールデン・uv 雛形済み。次は Issue #5（Lexer）
 - **制約**: Python 3.12+、ランタイム依存ゼロ、YAML 1.2、開発は uv
 - **API**: 辞書風 `loads`/`dumps` + `double_quoted()` 等のスタイルラッパ
 - **正本**: CST。未変更部分は source スライス再利用

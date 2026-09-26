@@ -24,8 +24,8 @@
 | デザインドキュメント | ✅ `docs/DESIGN.md` |
 | 対応範囲リスト | ✅ `docs/SUPPORT.md` |
 | ゴールデンテストデータ | ✅ `tests/golden/`（15 ケース）、`tests/golden_errors/`（5 ケース） |
-| uv プロジェクト雛形 | ❌ 未着手 |
-| 実装（lexer / parser / API） | ❌ 未着手 |
+| uv プロジェクト雛形 | ✅ `pyproject.toml` / `src/layout_yaml/` |
+| 実装（lexer / parser / API） | ❌ 未着手（#5〜） |
 
 **次にやること（DESIGN §8 より）:**
 
@@ -33,7 +33,7 @@
 2. lexer → CST parser（`00_identity_roundtrip` ゴールデンを通す）
 3. 値の置換 → 削除 → 追加 → Styled ラッパ → エラーケース
 
-実装コードは **まだ存在しません**。`src/` はこれから作ります。
+パッケージ雛形は `src/layout_yaml/` にあります。lexer / parser / API は #5 以降で追加します。
 
 ## エージェント向け作業ルール
 
@@ -190,14 +190,14 @@ uv run ruff check .
 uv run ruff format .
 ```
 
-雛形未作成の間は上記は使えません。最初のタスクで `uv init` / `pyproject.toml` を整備してください。
+初回は `uv sync --all-groups` で dev 依存を入れてください。
 
 ## タスク管理（GitHub Issues）
 
 作業タスクは GitHub Issues で管理する（Cursor 会話は別 PC に引き継げないため）。
 
 - **一覧・運用ルール**: [`docs/ISSUES.md`](docs/ISSUES.md)
-- **次に着手**: [#4 uv プロジェクト雛形](https://github.com/uttne/layout-yaml/issues/4)
+- **次に着手**: [#5 Lexer の実装](https://github.com/uttne/layout-yaml/issues/5)（#4 マージ後）
 
 着手前に Issue 本文（タスク・合格基準）を読み、完了時は Issue を Close する。コミットメッセージには `(#N)` を付ける。
 
@@ -208,7 +208,7 @@ uv run ruff format .
    - タスク管理: [Issues](https://github.com/uttne/layout-yaml/issues) — 詳細は [`docs/ISSUES.md`](docs/ISSUES.md)
 2. Cursor でワークスペースを開く（`.cursor/rules/` が自動読み込み）
 3. 本ファイル（`AGENTS.md`）、`docs/DESIGN.md`、`docs/ISSUES.md` を読む
-4. Open Issue のうち依存が解消されたものから着手（現在は **#4**）
+4. Open Issue のうち依存が解消されたものから着手（現在は **#5** Lexer）
 
 ## 会話を引き継ぐときのプロンプト例
 
