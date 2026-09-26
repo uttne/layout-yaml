@@ -1,7 +1,7 @@
 # layout-yaml — Agent Guide
 
 このファイルは **Cursor エージェント（および人間）が別 PC で作業を継続するため** の入口です。  
-仕様の詳細は `docs/DESIGN.md`、対応範囲は `docs/SUPPORT.md` を正とします。
+仕様の詳細は `docs/DESIGN.md`、対応範囲の分類は `docs/SUPPORT.md` を正とします。
 
 ## プロジェクト概要
 
@@ -17,23 +17,18 @@
 | YAML 版 | 1.2 |
 | ライセンス | MIT |
 
-## 現在の進捗（2026-08 時点）
+## 状態とドキュメント
 
-| フェーズ | 状態 |
-|----------|------|
-| デザインドキュメント | ✅ `docs/DESIGN.md` |
-| 対応範囲リスト | ✅ `docs/SUPPORT.md` |
-| ゴールデンテストデータ | ✅ `tests/golden/`（15 ケース）、`tests/golden_errors/`（5 ケース） |
-| uv プロジェクト雛形 | ✅ `pyproject.toml` / `src/layout_yaml/` |
-| 実装（lexer / parser / API） | ❌ 未着手（#5〜） |
+| 種類 | 正本 |
+|------|------|
+| 進捗、次に着手する作業、Open / Closed、依存 | [GitHub Issues](https://github.com/uttne/layout-yaml/issues)（本文のタスクチェックと Open / Closed） |
+| 仕様（API、レイアウト規則、エラー方針） | `docs/DESIGN.md` とゴールデン |
+| 対応範囲の分類 | `docs/SUPPORT.md`（実装済みかのチェックは付けない） |
+| エージェント・開発のルール | 本ファイル、`.cursor/rules/project.mdc`、`.cursor/issue-agent.md` |
 
-**次にやること（DESIGN §8 より）:**
+リポジトリ内の文書は **仕様・分類・安定した作業の仕方** だけを書く。作業の進捗は文書に書く場所を持たない。文書を更新するのは、仕様・対応範囲の分類・エージェント／開発ルールが変わったときだけ。実装 Issue を Close しただけでは触らない。
 
-1. uv でプロジェクト雛形（`pyproject.toml`、MIT、`src/layout_yaml/`、pytest / ruff）
-2. lexer → CST parser（`00_identity_roundtrip` ゴールデンを通す）
-3. 値の置換 → 削除 → 追加 → Styled ラッパ → エラーケース
-
-パッケージ雛形は `src/layout_yaml/` にあります。lexer / parser / API は #5 以降で追加します。
+未決定の仕様論点は Issue [#17](https://github.com/uttne/layout-yaml/issues/17)〜[#22](https://github.com/uttne/layout-yaml/issues/22)（各 Issue 本文が正本）。論点が決まったら `docs/DESIGN.md`（必要ならゴールデン）に反映し、**仕様の正本は文書**。該当 Issue を Close し、上の導線からその行を外す（新規未決 Issue を作ったときだけ行を足す）。
 
 ## エージェント向け作業ルール
 
@@ -41,10 +36,10 @@
 2. **ゴールデンが仕様**: 振る舞いの最終判断は `expected.yaml` / `expected_error.json`。曖昧なら expected を更新し DESIGN に追記
 3. **ランタイム非依存を守る**: PyYAML 等の YAML ライブラリは使わない（CST を自前実装）
 4. **CST を正とする**: dict への変換はビュー。レイアウト情報は CST / trivia に保持
-5. **小さく進める**: 実装順に沿い、まず roundtrip（`00`）から
-6. **対応表を更新**: 機能を実装したら `docs/SUPPORT.md` のチェックボックスを更新
-7. **Issue でタスク管理**: 作業は GitHub Issue に紐づける（詳細: `docs/ISSUES.md`）
-8. **コミットはユーザー指示時のみ**: 明示されない限り git commit しない
+5. **小さく進める**: 依存の解消された Issue から、ゴールデン単位で進める
+6. **対応分類**: 対応範囲の分類が変わったときだけ `docs/SUPPORT.md` を更新する（実装しただけではチェックを動かさない）
+7. **Issue でタスク管理**: 作業は GitHub Issue に紐づける（書き方は下記「GitHub Issues」）
+8. **コミットはユーザー指示時のみ**: 明示されない限り git commit しない（`@agent go` 実行時はワークフロー指示に従う）
 
 PR を `@agent` でレビューする際のプロジェクト固有指針は [`.cursor/pr-review.md`](.cursor/pr-review.md)（共通プロンプトは `.github/workflows/prompts/pr-review-agent.md`）。
 
@@ -60,12 +55,12 @@ Issue を `@agent` で進める場合:
 
 ### 1 Issue を実装するときの GitHub 上の流れ（推奨）
 
-1. **Issue 作成** — `docs/ISSUES.md` のテンプレどおり、タスク・合格基準を Issue **概要**に書く。
+1. **Issue 作成** — 下記テンプレに沿ってタスク・合格基準を Issue **概要**に書く。
 2. **`@agent` または `@agent plan`** — 方針を会話する。Agent は**そのターンで変わった点だけ**短く返す。人間の返信に `@agent` は不要（次に Agent を呼ぶコメントで、それ以前の人間コメントも読む）。
 3. **必要なら会話を続ける** — 同じ Issue にコメントし、再度 `@agent` を付ける。
 4. **`@agent sync`** — 合意内容を Issue **概要**に統合。Agent は **同期記録**コメント（どの comment id まで反映したか）を残す。
 5. **人間が概要を確認** — 必要なら Issue 概要を手 edit、または `@agent sync` を再実行。
-6. **`@agent go`** — 実装・push・PR 作成（`Closes #N`、PR 本文は日本語）。ブランチは `agent/issue-N`（既存があればその続き）。Issue **概要**のタスクチェックと「進捗」を更新し、コメント **`@agent go 実装記録`** にできたこと・残り・ブロックを残す。もう一度 `@agent go` すると概要のチェック、その記録、同じブランチから再開する。`.github/workflows/` は Actions から push しない。
+6. **`@agent go`** — 実装・push・PR 作成（`Closes #N`、PR 本文は日本語）。ブランチは `agent/issue-N`（既存があればその続き）。Issue **概要**のタスクチェックを更新し、コメント **`@agent go 実装記録`** にできたこと・残り・ブロックを残す。もう一度 `@agent go` すると概要のチェック、その記録、同じブランチから再開する。`.github/workflows/` は Actions から push しない。
 7. **PR レビュー** — 人間、または PR 上で `@agent`（[cursor-pr-review.yml](.github/workflows/cursor-pr-review.yml)）。
 8. **マージ** — Issue は PR の `Closes #N` で Close。
 
@@ -80,7 +75,7 @@ PR コメント … レビュー（@agent は PR のみ）
 ```text
 @agent go
 
-#4 の合格基準どおり。pyproject のみ触る。コミットに (#4) を付けて。
+Issue #N の合格基準どおり。コミットに (#N) を付けて。
 ```
 
 ## 公開 API（確定）
@@ -168,15 +163,14 @@ tests/golden_errors/<case>/
 
 | ファイル | 用途 |
 |----------|------|
-| `AGENTS.md`（本ファイル） | エージェント向け入口・進捗 |
-| `docs/DESIGN.md` | 詳細設計・API・削除ルール・実装順 |
-| `docs/SUPPORT.md` | 対応 / 未対応 / 対象外 |
-| `docs/ISSUES.md` | GitHub Issues によるタスク管理・Issue 一覧 |
+| `AGENTS.md`（本ファイル） | エージェント向け入口・Issue の書き方・作業ルール |
+| `docs/DESIGN.md` | 詳細設計・API・削除ルール |
+| `docs/SUPPORT.md` | 対応 / 未対応 / 対象外の分類 |
 | `tests/golden/README.md` | ops.json スキーマ・ケース一覧 |
 | `tests/golden_errors/README.md` | エラーゴールデンの形式 |
 | `.cursor/rules/*.mdc` | Cursor ルール（自動適用） |
 
-## 開発コマンド（雛形作成後）
+## 開発コマンド
 
 ```bash
 # 初回セットアップ
@@ -190,39 +184,92 @@ uv run ruff check .
 uv run ruff format .
 ```
 
-初回は `uv sync --all-groups` で dev 依存を入れてください。
+## GitHub Issues
 
-## タスク管理（GitHub Issues）
+作業タスクは [GitHub Issues](https://github.com/uttne/layout-yaml/issues) で管理する（Cursor 会話は別 PC に引き継げないため）。
 
-作業タスクは GitHub Issues で管理する（Cursor 会話は別 PC に引き継げないため）。
+| 項目 | ルール |
+|------|--------|
+| タスクの記録 | 実装・設計・テストなどの作業単位は Issue に紐づける |
+| 進捗の正本 | Issue の Open / Closed と本文のチェックリスト |
+| 仕様の正本 | `docs/DESIGN.md` とゴールデンテスト |
+| 会話の代替 | Issue 本文・コメントに決定事項を残す |
 
-- **一覧・運用ルール**: [`docs/ISSUES.md`](docs/ISSUES.md)
-- **次に着手**: [#5 Lexer の実装](https://github.com/uttne/layout-yaml/issues/5)（#4 マージ後）
+### Issue の書き方
 
-着手前に Issue 本文（タスク・合格基準）を読み、完了時は Issue を Close する。コミットメッセージには `(#N)` を付ける。
+新規 Issue には次を含める。
+
+- **概要**（1〜2 文）
+- **タスク**（チェックリスト）
+- **合格基準**（あれば）
+- **参照**（関連ドキュメント・ゴールデン）
+- **依存**（ブロックする Issue 番号。なければ「なし」）
+
+```bash
+gh issue create --repo uttne/layout-yaml \
+  --title "タイトル" \
+  --body "## 概要
+...
+
+## タスク
+- [ ] ...
+
+## 合格基準
+- ...
+
+## 参照
+- docs/DESIGN.md
+
+## 依存
+- #N"
+```
+
+大きな機能は 1 Issue にまとめすぎず、ゴールデン合格単位で分割する。
+
+### 作業フロー
+
+**着手前**
+
+1. [Issues](https://github.com/uttne/layout-yaml/issues) で Open の Issue を確認する
+2. 依存 Issue が Closed であることを確認する（依存は各 Issue 本文に書く）
+3. 該当 Issue の本文（タスク・合格基準・参照）を読む
+4. 必要なら `docs/DESIGN.md` とゴールデンケースを確認する
+
+**作業中**
+
+- Issue 本文のチェックリストを更新する
+- 仕様上の決定があれば Issue コメントに残す
+- 仕様変更が必要なら **先に** ゴールデンと `docs/DESIGN.md` を更新し、Issue に理由をコメントする
+- コミットメッセージに Issue 番号を含める（例: `Add lexer (#5)`）
+
+**完了時**
+
+1. 合格基準（ゴールデン等）を満たしたことを確認する
+2. 対応範囲の分類が変わったときだけ `docs/SUPPORT.md` を更新する
+3. Issue を Close する（PR マージ時に `Closes #N` でも可）
+
+**新規タスク**
+
+既存 Issue のスコープ外、バグ、仕様未決定の解消などは **新しい Issue** を作成する。
+
+### CLI 例
+
+```bash
+gh issue list --repo uttne/layout-yaml
+gh issue view N --repo uttne/layout-yaml
+gh issue comment N --repo uttne/layout-yaml --body "作業開始"
+```
 
 ## 別 PC での再開手順
 
-1. リポジトリを clone / コピー
-   - GitHub: https://github.com/uttne/layout-yaml
-   - タスク管理: [Issues](https://github.com/uttne/layout-yaml/issues) — 詳細は [`docs/ISSUES.md`](docs/ISSUES.md)
-2. Cursor でワークスペースを開く（`.cursor/rules/` が自動読み込み）
-3. 本ファイル（`AGENTS.md`）、`docs/DESIGN.md`、`docs/ISSUES.md` を読む
-4. Open Issue のうち依存が解消されたものから着手（現在は **#5** Lexer）
+1. リポジトリを clone / コピー — https://github.com/uttne/layout-yaml
+2. [Open Issues](https://github.com/uttne/layout-yaml/issues) で依存が解消されたものを選ぶ
+3. Cursor でワークスペースを開く（`.cursor/rules/` が自動読み込み）
+4. 本ファイル（`AGENTS.md`）、`docs/DESIGN.md`、対象 Issue の本文を読む
 
 ## 会話を引き継ぐときのプロンプト例
 
 ```text
-layout-yaml プロジェクトを継続します。AGENTS.md、docs/DESIGN.md、docs/ISSUES.md を読んで、
-Issue #4（uv プロジェクト雛形）から実装を進めてください。
+layout-yaml プロジェクトを継続します。AGENTS.md と docs/DESIGN.md を読み、
+GitHub Issue #N（タイトルを書く）を実装してください。
 ```
-
-## 未決定事項（実装時に詰める）
-
-- シーケンス API の初期範囲（`append` / `insert` 等）
-- 先頭 `---` 1 回の許容（ゴールデンで固定）
-- タブ混在ファイルの扱い
-- dump 時の改行コード（入力追従 vs `\n` 固定）
-- float 表記の細則
-
-決定したら `docs/DESIGN.md` §9 を更新し、必要ならゴールデンを追加してください。

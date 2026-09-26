@@ -26,5 +26,5 @@ alwaysApply: false
 
 1. まず `expected.yaml`（または `expected_error.json`）を更新
 2. 理由を `docs/DESIGN.md` に追記
-3. 対応機能なら `docs/SUPPORT.md` のチェックを更新
+3. 対応範囲の分類が変わったときだけ `docs/SUPPORT.md` を更新（実装しただけでは触らない）
 4. 破壊的 emit 変更はユーザー確認を推奨

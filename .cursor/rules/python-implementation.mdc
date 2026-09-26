@@ -21,6 +21,7 @@ alwaysApply: false
 - 公開 API は `__init__.py` から re-export
 - 型ヒントを付ける（Python 3.12+）
 - 実装順: roundtrip（`00_identity_roundtrip`）→ set → delete → add → styled → errors
+- 着手順・優先の正本は [GitHub Issues](https://github.com/uttne/layout-yaml/issues) の依存。上はモジュール間の目安
 
 ## 例外
 
