@@ -1,6 +1,6 @@
 # layout-yaml Design Document
 
-> **エージェント向け入口**: 進捗・再開手順は [`AGENTS.md`](../AGENTS.md)。Cursor ルールは [`.cursor/rules/`](../.cursor/rules/)。
+> **エージェント向け入口**: 作業の仕方と Issue の扱いは [`AGENTS.md`](../AGENTS.md)。本書は **仕様** の正本。Cursor ルールは [`.cursor/rules/`](../.cursor/rules/)。
 
 ## 1. 目的
 
@@ -263,25 +263,6 @@ class EditError(LayoutYamlError): ...        # 存在しないキー削除など
 
 対応範囲の一覧は `docs/SUPPORT.md` を正とする。
 
-## 8. 実装順序（予定）
+## 8. 実装タスクと着手順
 
-タスクは GitHub Issues で管理する。一覧・運用は [`docs/ISSUES.md`](ISSUES.md) を正とする。
-
-1. 本ドキュメントとゴールデンデータ — ✅ [#1](https://github.com/uttne/layout-yaml/issues/1) [#2](https://github.com/uttne/layout-yaml/issues/2)
-2. uv プロジェクト雛形 — [#4](https://github.com/uttne/layout-yaml/issues/4)
-3. lexer → CST parser（読み取り・再 dump の恒等性） — [#5](https://github.com/uttne/layout-yaml/issues/5) [#6](https://github.com/uttne/layout-yaml/issues/6)
-4. 値の置換 — [#7](https://github.com/uttne/layout-yaml/issues/7)
-5. 削除（trivia ルール） — [#8](https://github.com/uttne/layout-yaml/issues/8)
-6. 追加（近傍スタイル / StyleConfig） — [#9](https://github.com/uttne/layout-yaml/issues/9)
-7. Styled ラッパ — [#10](https://github.com/uttne/layout-yaml/issues/10)
-8. エラーケースと SUPPORT の更新 — [#11](https://github.com/uttne/layout-yaml/issues/11)
-9. ゴールデンテストランナー — [#12](https://github.com/uttne/layout-yaml/issues/12)
-10. PyPI 公開準備 — [#13](https://github.com/uttne/layout-yaml/issues/13)
-
-## 9. 未決定・実装時に詰める項目
-
-- シーケンス API の初期範囲（`append` / `insert` / スライス削除の有無）
-- 新規キーの挿入位置を末尾以外にする API の要否
-- タブ混在ファイルの扱い（エラーにするか、行単位維持か）
-- dump 時の改行コード（`\n` 固定か、入力追従か）→ 初期は入力の改行様式追従を検討
-- float の表記（`1.0` vs `1`）の細則
+実装の依存関係と着手順の正本は [GitHub Issues](https://github.com/uttne/layout-yaml/issues) の各 Issue 本文（**依存** セクション）である。本ドキュメントには進捗や Issue 一覧を書かない。
