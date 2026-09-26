@@ -26,7 +26,6 @@ substitute_prompt_vars() {
     -e "s|\$REPOSITORY|${REPOSITORY}|g" \
     -e "s|\$ISSUE_NUMBER|${ISSUE_NUMBER}|g" \
     -e "s|\$TRIGGERED_BY|${TRIGGERED_BY}|g" \
-    -e "s|\$TRIGGER_COMMENT_BODY|${TRIGGER_COMMENT_BODY}|g" \
     -e "s|\$ISSUE_REPLY_OUTPUT_PATH|${ISSUE_REPLY_OUTPUT_PATH}|g" \
     -e "s|\$DEFAULT_BRANCH|${DEFAULT_BRANCH:-main}|g" \
     -e "s|\$WORK_BRANCH|${WORK_BRANCH:-}|g"
