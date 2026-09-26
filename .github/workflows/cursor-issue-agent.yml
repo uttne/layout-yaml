@@ -118,6 +118,15 @@ jobs:
           DEFAULT_BRANCH: ${{ steps.repo.outputs.default_branch }}
         run: |
           set -euo pipefail
+          # Resume checks out an older branch that may not contain the current
+          # publish script or go prompt. Keep the default-branch copies.
+          mkdir -p "$RUNNER_TEMP/go-tools/scripts" "$RUNNER_TEMP/go-tools/prompts"
+          cp .github/scripts/cursor-issue-agent.sh "$RUNNER_TEMP/go-tools/scripts/"
+          cp .github/scripts/publish-go.sh "$RUNNER_TEMP/go-tools/scripts/"
+          cp .github/workflows/prompts/issue-agent-go.md "$RUNNER_TEMP/go-tools/prompts/"
+          if [[ -f .cursor/issue-agent.md ]]; then
+            cp .cursor/issue-agent.md "$RUNNER_TEMP/go-tools/issue-agent.md"
+          fi
           bash .github/scripts/prepare-go-branch.sh
           # shellcheck disable=SC1091
           source "${RUNNER_TEMP}/go-branch.env"
@@ -168,7 +177,9 @@ jobs:
           WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
           GO_RESUMED: ${{ steps.branch.outputs.resumed }}
           GO_STATUS_PATH: ${{ runner.temp }}/go-status.md
-        run: bash .github/scripts/cursor-issue-agent.sh
+          PROMPT_TEMPLATE_PATH: ${{ runner.temp }}/go-tools/prompts/issue-agent-go.md
+          PROJECT_CONTEXT_PATH: ${{ runner.temp }}/go-tools/issue-agent.md
+        run: bash "$RUNNER_TEMP/go-tools/scripts/cursor-issue-agent.sh"
 
       - name: Publish branch, pull request, and implementation record
         if: steps.parse.outputs.invalid != 'true' && steps.parse.outputs.mode == 'go'
@@ -181,7 +192,7 @@ jobs:
         run: |
           set -euo pipefail
           bash .github/scripts/issue-agent-progress.sh publishing
-          bash .github/scripts/publish-go.sh
+          bash "$RUNNER_TEMP/go-tools/scripts/publish-go.sh"
 
       - name: Fail when go agent did not finish
         if: steps.go_agent.outcome == 'failure'
