@@ -46,6 +46,8 @@
 7. **Issue でタスク管理**: 作業は GitHub Issue に紐づける（詳細: `docs/ISSUES.md`）
 8. **コミットはユーザー指示時のみ**: 明示されない限り git commit しない
 
+PR を `@agent` でレビューする際のプロジェクト固有指針は [`.cursor/pr-review.md`](.cursor/pr-review.md)（共通プロンプトは `.github/workflows/prompts/pr-review-agent.md`）。
+
 ## 公開 API（確定）
 
 辞書風 API + スタイルラッパ。パス API（`doc.set(["a","b"], v)`）は初期必須ではない。

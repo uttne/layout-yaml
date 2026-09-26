@@ -1,0 +1,142 @@
+# Manual PR review via Cursor CLI.
+#
+# Trigger: post a comment on a pull request that contains @agent
+# (for example: "@agent レビューしてください").
+#
+# Prompt: .github/workflows/prompts/pr-review-agent.md (shared)
+#         + .cursor/pr-review.md (per-repo; optional)
+#
+# Requires repository secret: CURSOR_API_KEY
+# See https://cursor.com/docs/cli/github-actions
+#
+# Model: composer-2.5 (non-fast). Avoid "auto" — it may route to premium models.
+
+name: Cursor PR review (@agent)
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    if: >-
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '@agent') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: cursor-pr-review-${{ github.event.issue.number }}
+      cancel-in-progress: true
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ github.event.issue.number }}
+      REPOSITORY: ${{ github.repository }}
+      TRIGGERED_BY: ${{ github.event.comment.user.login }}
+      GITHUB_SERVER_URL: ${{ github.server_url }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      GITHUB_RUN_ID: ${{ github.run_id }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+    steps:
+      - name: Load workflow scripts
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+            .github/workflows/prompts
+          sparse-checkout-cone-mode: true
+
+      - name: Acknowledge review request
+        env:
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: |
+          set -euo pipefail
+          gh api --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "repos/$REPOSITORY/issues/comments/$COMMENT_ID/reactions" \
+            -f content='eyes' >/dev/null
+          bash .github/scripts/pr-review-progress.sh received
+
+      - name: Resolve pull request context
+        id: pr
+        run: |
+          set -euo pipefail
+          pr_json=$(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER")
+          state=$(jq -er '.state' <<< "$pr_json")
+          head_repository=$(jq -er '.head.repo.full_name' <<< "$pr_json")
+          head_sha=$(jq -er '.head.sha' <<< "$pr_json")
+          base_sha=$(jq -er '.base.sha' <<< "$pr_json")
+
+          if [[ "$state" != "open" ]]; then
+            echo "PR #$PR_NUMBER is not open."
+            exit 1
+          fi
+
+          if [[ "$head_repository" != "$REPOSITORY" ]]; then
+            echo "Reviews are limited to branches in $REPOSITORY (not fork PRs)."
+            exit 1
+          fi
+
+          {
+            echo "head_sha=$head_sha"
+            echo "base_sha=$base_sha"
+          } >> "$GITHUB_OUTPUT"
+          PR_HEAD_SHA="$head_sha" bash .github/scripts/pr-review-progress.sh pr_resolved
+
+      - name: Checkout pull request head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Progress — checkout complete
+        env:
+          PR_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: bash .github/scripts/pr-review-progress.sh checked_out
+
+      - name: Install Cursor CLI
+        run: |
+          set -euo pipefail
+          curl -fsSL https://cursor.com/install | bash
+          echo "$HOME/.cursor/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Progress — CLI ready
+        env:
+          PR_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: bash .github/scripts/pr-review-progress.sh cli_ready
+
+      - name: Run review and post PR comment
+        timeout-minutes: 20
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          MODEL: composer-2.5[fast=false]
+          PR_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          PR_BASE_SHA: ${{ steps.pr.outputs.base_sha }}
+          REVIEW_OUTPUT_PATH: ${{ runner.temp }}/pr-review.md
+        run: bash .github/scripts/cursor-pr-review.sh
+
+      - name: Progress — completed
+        if: success()
+        env:
+          PR_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: bash .github/scripts/pr-review-progress.sh completed
+
+      - name: Report failure on pull request
+        if: failure()
+        env:
+          PR_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          if [[ -f "$RUNNER_TEMP/pr-review-progress-comment-id" ]]; then
+            bash .github/scripts/pr-review-progress.sh failed || true
+          fi
+          gh pr comment "$PR_NUMBER" --repo "$REPOSITORY" --body "⚠️ @agent レビューを完了できませんでした。進捗コメントと [ワークフロー実行]($RUN_URL) を確認してください。"
