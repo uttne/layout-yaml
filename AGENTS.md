@@ -180,7 +180,7 @@ tests/golden_errors/<case>/
 
 ```bash
 # 初回セットアップ
-uv sync --all-extras
+uv sync --all-groups
 
 # テスト
 uv run pytest
