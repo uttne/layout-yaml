@@ -16,8 +16,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-COMPOSER_ID = "composer-2.5[fast=false]"
-GROK_ID = "grok-4.7[reasoning_effort=medium,fast=false]"
+# cursor-agent --model accepts these slugs. Fast variants are separate ids
+# (composer-2.5-fast, grok-4.7-medium-fast), so these two are the non-fast models.
+COMPOSER_ID = "composer-2.5"
+GROK_ID = "grok-4.7-medium"
 COMPOSER_LABEL = "Composer 2.5"
 GROK_LABEL = "Grok 4.7 medium"
 
