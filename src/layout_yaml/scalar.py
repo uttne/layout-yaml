@@ -50,7 +50,7 @@ def _decode_plain(text: str) -> str | bool | int | float | None:
         else:
             if math.isfinite(value):
                 return value
-    return text
+    return text.rstrip()
 
 
 def _looks_like_int(text: str) -> bool:

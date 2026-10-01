@@ -12,8 +12,8 @@ CASE = GOLDEN / "input.yaml"
 
 def test_mapping_view_reads_identity_golden() -> None:
     doc = loads(CASE.read_text(encoding="utf-8"))
-    assert doc["name"] == "demo "
-    assert list(doc["items"]) == [0, 1]
+    assert doc["name"] == "demo"
+    assert list(doc["items"]) == ["a", "b"]
     assert doc["items"][0] == "a"
     assert doc["items"][1] == "b"
     assert doc["empty"] is None

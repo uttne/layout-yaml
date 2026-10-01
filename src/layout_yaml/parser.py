@@ -165,8 +165,6 @@ class _Parser:
         ):
             self._advance()
         self._expect(TokenKind.DOUBLE_QUOTE)
-        if self._peek_kind() == TokenKind.NEWLINE:
-            self._advance()
         return DoubleQuotedScalar(start, self._prev_end())
 
     def _parse_single_quoted(self) -> SingleQuotedScalar:
@@ -177,8 +175,6 @@ class _Parser:
         ):
             self._advance()
         self._expect(TokenKind.SINGLE_QUOTE)
-        if self._peek_kind() == TokenKind.NEWLINE:
-            self._advance()
         return SingleQuotedScalar(start, self._prev_end())
 
     def _parse_block_value(
@@ -201,8 +197,6 @@ class _Parser:
                 self._finish_indented_block()
         if self._peek_kind() == TokenKind.LIST_ENTRY:
             return self._parse_block_sequence()
-        if self._peek_kind() == TokenKind.PLAIN_SCALAR and self._peek_ahead_colon():
-            return self._parse_block_mapping(self._current_start())
         return None
 
     def _parse_block_sequence(self) -> BlockSequence:
@@ -223,10 +217,7 @@ class _Parser:
             self._advance()
         if self._peek_kind() == TokenKind.PLAIN_SCALAR and not self._peek_ahead_colon():
             scalar = self._parse_plain_scalar_line()
-            item_end = scalar.end
-            if self._peek_kind() == TokenKind.NEWLINE:
-                self._advance()
-                item_end = self._prev_end()
+            item_end = self._consume_sequence_item_trailing(scalar.end)
             return SequenceItem(item_start, item_end, scalar)
         if self._peek_kind() == TokenKind.INDENT:
             self._advance()
@@ -256,17 +247,27 @@ class _Parser:
         token = self._expect(TokenKind.PLAIN_SCALAR)
         return PlainScalar(token.start, token.end)
 
+    def _consume_sequence_item_trailing(self, end: int) -> int:
+        while not self._at_end():
+            kind = self._peek_kind()
+            if kind in (TokenKind.WHITESPACE, TokenKind.COMMENT, TokenKind.NEWLINE):
+                self._advance()
+                end = self._prev_end()
+                if kind == TokenKind.NEWLINE:
+                    break
+                continue
+            break
+        return end
+
     def _consume_entry_trailing(self) -> int:
         end = self._prev_end()
         while not self._at_end():
             kind = self._peek_kind()
             if kind == TokenKind.DEDENT:
                 break
-            if kind == TokenKind.COMMENT:
-                break
             if kind == TokenKind.PLAIN_SCALAR and self._peek_ahead_colon():
                 break
-            if kind == TokenKind.NEWLINE:
+            if kind in (TokenKind.WHITESPACE, TokenKind.COMMENT, TokenKind.NEWLINE):
                 self._advance()
                 end = self._prev_end()
                 continue
@@ -294,8 +295,6 @@ class _Parser:
                 TokenKind.PLAIN_SCALAR,
             ):
                 return True
-        if kind == TokenKind.PLAIN_SCALAR and self._colon_after(j):
-            return True
         return False
 
     def _colon_after(self, index: int) -> bool:

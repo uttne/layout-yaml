@@ -97,17 +97,17 @@ class SequenceView(Mapping[int, Any]):
     def __getitem__(self, index: int) -> Any:
         if not isinstance(index, int):
             raise TypeError("sequence indices must be integers")
-        try:
-            item = self._sequence.items[index]
-        except IndexError:
-            raise KeyError(index) from None
+        if index < 0 or index >= len(self._sequence.items):
+            raise IndexError("sequence index out of range")
+        item = self._sequence.items[index]
         return view_for_value(self._source, item.value)
 
     def __len__(self) -> int:
         return len(self._sequence.items)
 
-    def __iter__(self) -> Iterator[int]:
-        yield from range(len(self._sequence.items))
+    def __iter__(self) -> Iterator[Any]:
+        for item in self._sequence.items:
+            yield view_for_value(self._source, item.value)
 
     def __contains__(self, key: object) -> bool:
         if not isinstance(key, int):
