@@ -8,6 +8,7 @@ alwaysApply: true
 レイアウト維持 YAML エディタ。人間が書いた YAML を局所編集し diff を小さく保つ。
 
 - **入口**: `AGENTS.md`（作業ルール・Issue）、`docs/DESIGN.md`（仕様）、`docs/SUPPORT.md`（対応分類）
+- **ツール**: `.github` を変えたら `.github/README.md`、`.cursor` を変えたら `.cursor/README.md` の確認を行う
 - **制約**: Python 3.12+、ランタイム依存ゼロ、YAML 1.2、開発は uv
 - **API**: 辞書風 `loads`/`dumps` + `double_quoted()` 等のスタイルラッパ
 - **正本**: CST。未変更部分は source スライス再利用

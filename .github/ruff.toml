@@ -1,0 +1,10 @@
+# Used only by scripts/check_py.py in this directory.
+# E501: these scripts keep long commands and messages.
+# E402: some scripts add their directory to sys.path before importing agentlib.
+
+target-version = "py312"
+line-length = 88
+
+[lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501", "E402"]

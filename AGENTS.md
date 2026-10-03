@@ -169,6 +169,8 @@ tests/golden_errors/<case>/
 | `tests/golden/README.md` | ops.json スキーマ・ケース一覧 |
 | `tests/golden_errors/README.md` | エラーゴールデンの形式 |
 | `.cursor/rules/*.mdc` | Cursor ルール（自動適用） |
+| `.github/README.md` | `.github` を変更したときに行う確認 |
+| `.cursor/README.md` | `.cursor` を変更したときに行う確認 |
 
 ## 開発コマンド
 
@@ -179,9 +181,13 @@ uv sync --all-groups
 # テスト
 uv run pytest
 
-# リント
+# リント（ライブラリとテスト）
 uv run ruff check .
 uv run ruff format .
+
+# .github / .cursor の Python を変えたとき（CI には含まれない）
+python .github/scripts/check_py.py
+python .cursor/scripts/check_py.py
 ```
 
 ## GitHub Issues
