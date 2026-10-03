@@ -1,0 +1,19 @@
+---
+description: Windows ではエージェントのシェル出力を UTF-8 にする
+alwaysApply: true
+---
+
+# Windows シェルの文字コード
+
+エージェントは `pwsh.exe -NonInteractive -File` でシェルを直接起動する。`.vscode/settings.json` のターミナル起動コマンドは、このシェルには渡らない。日本語 Windows では出力が Shift_JIS になり、結果が文字化けする。
+
+このセッションでシェルを初めて使うとき、他のコマンドより先に次を実行する。同じシェルが続いている間は繰り返さない。
+
+```powershell
+$utf8 = New-Object System.Text.UTF8Encoding $false
+[Console]::OutputEncoding = $utf8
+$OutputEncoding = $utf8
+$env:PYTHONIOENCODING = 'utf-8'
+```
+
+`chcp 65001` だけでは `[Console]::OutputEncoding` は Shift_JIS のままなので、上の代入を省かない。

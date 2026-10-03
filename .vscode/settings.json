@@ -1,0 +1,28 @@
+{
+    "terminal.integrated.defaultProfile.windows": "PowerShell",
+    "terminal.integrated.profiles.windows": {
+        "PowerShell": {
+            "path": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+            "args": [
+                "-NoExit",
+                "-Command",
+                "chcp 65001 > $null; $utf8 = New-Object System.Text.UTF8Encoding $false; $OutputEncoding = $utf8; [Console]::OutputEncoding = $utf8; $env:PYTHONIOENCODING = 'utf-8'"
+            ]
+        },
+        "Windows PowerShell": {
+            "path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+            "args": [
+                "-NoExit",
+                "-Command",
+                "chcp 65001 > $null; $utf8 = New-Object System.Text.UTF8Encoding $false; $OutputEncoding = $utf8; [Console]::OutputEncoding = $utf8; $env:PYTHONIOENCODING = 'utf-8'"
+            ]
+        },
+        "Command Prompt": {
+            "path": "C:\\Windows\\System32\\cmd.exe",
+            "args": [
+                "/K",
+                "chcp 65001"
+            ]
+        }
+    }
+}

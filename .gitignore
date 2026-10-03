@@ -18,7 +18,8 @@ htmlcov/
 
 # IDE
 .idea/
-.vscode/
+.vscode/*
+!.vscode/settings.json
 *.swp
 
 # OS
