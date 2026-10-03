@@ -40,6 +40,7 @@
 6. **対応分類**: 対応範囲の分類が変わったときだけ `docs/SUPPORT.md` を更新する（実装しただけではチェックを動かさない）
 7. **Issue でタスク管理**: 作業は GitHub Issue に紐づける（書き方は下記「GitHub Issues」）
 8. **コミットはユーザー指示時のみ**: 明示されない限り git commit しない（`@agent go` 実行時はワークフロー指示に従う）
+9. **一時ファイルは `scratch/`**: 調査メモ、下書き、再現スクリプト、ダンプはリポジトリ直下の `scratch/` に置く。仕様と進捗の正本にはしない。`scratch/README.md` 以外は git 管理外（`.cursor/rules/scratch.mdc`）
 
 PR を `@agent` でレビューする際のプロジェクト固有指針は [`.cursor/pr-review.md`](.cursor/pr-review.md)（共通プロンプトは `.github/workflows/prompts/pr-review-agent.md`）。
 

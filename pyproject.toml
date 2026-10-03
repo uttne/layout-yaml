@@ -29,7 +29,7 @@ target-version = "py312"
 line-length = 88
 src = ["src", "tests"]
 # .github and .cursor each lint themselves via their own scripts/check_py.py.
-extend-exclude = ["docs", ".github", ".cursor"]
+extend-exclude = ["docs", ".github", ".cursor", "scratch"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]

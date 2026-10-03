@@ -25,3 +25,7 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Agent scratch (local notes and throwaway scripts)
+/scratch/*
+!/scratch/README.md
