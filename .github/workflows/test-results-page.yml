@@ -1,0 +1,100 @@
+# Publish JUnit XML from CI as the repository GitHub Pages site.
+# Pages is an Actions artifact (upload-pages-artifact), not a branch.
+# This workflow owns that site: the artifact is the whole site.
+
+name: Test results page
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  actions: read
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: test-results-page
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: >
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.conclusion != 'cancelled' &&
+      github.event.workflow_run.conclusion != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      published: ${{ steps.site.outputs.published }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download JUnit XML from CI
+        id: incoming
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: junit-xml*
+          merge-multiple: true
+          path: incoming
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+
+      - name: Build site
+        id: site
+        if: steps.incoming.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+          SOURCE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          SOURCE_RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          SOURCE_REF: refs/heads/${{ github.event.workflow_run.head_branch }}
+          SOURCE_EVENT: ${{ github.event.workflow_run.event }}
+          SOURCE_ACTOR: ${{ github.event.workflow_run.actor.login }}
+          SOURCE_URL: ${{ github.event.workflow_run.html_url }}
+          SOURCE_CREATED_AT: ${{ github.event.workflow_run.run_started_at || github.event.workflow_run.created_at }}
+        run: |
+          python3 .github/scripts/test_results_page.py fetch-previous --dest previous
+          python3 .github/scripts/test_results_page.py build \
+            --incoming incoming \
+            --previous previous \
+            --out _site \
+            --pattern '\.xml$'
+          if [ -f _site/summary.json ]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Note missing results
+        if: steps.incoming.outcome != 'success'
+        run: echo "CI did not upload junit-xml. Pages was left unchanged."
+
+      - name: Upload GitHub Pages artifact
+        if: steps.site.outputs.published == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+          retention-days: 90
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Summarize
+        run: echo "テスト結果: ${{ steps.deployment.outputs.page_url }}" >> "$GITHUB_STEP_SUMMARY"

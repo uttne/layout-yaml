@@ -9,6 +9,7 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
+  actions: write
   contents: read
   pull-requests: write
 
@@ -46,7 +47,22 @@ jobs:
       - name: Pytest
         id: pytest
         if: steps.sync.outcome == 'success'
-        run: uv run pytest --junitxml="${{ runner.temp }}/pytest-results.xml" -o junit_family=legacy
+        run: |
+          dir="${{ runner.temp }}/test-results"
+          mkdir -p "$dir"
+          junit="$dir/pytest-$(python3 -c 'import uuid; from datetime import datetime, timezone; print(datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + str(uuid.uuid4()))').xml"
+          echo "JUNIT_XML=$junit" >> "$GITHUB_ENV"
+          uv run pytest --junitxml="$junit" -o junit_family=legacy
+
+      # Unique names so parallel jobs can share one artifact directory.
+      - name: Upload JUnit results
+        if: steps.pytest.outcome == 'success' || steps.pytest.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-xml
+          path: ${{ runner.temp }}/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
 
       # A comment-post failure must not fail the job. Pytest and Ruff do.
       - name: Publish pytest results
@@ -54,4 +70,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: python3 .github/scripts/pytest_report.py "${{ runner.temp }}/pytest-results.xml"
+        run: python3 .github/scripts/pytest_report.py "$JUNIT_XML"

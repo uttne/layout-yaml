@@ -1,0 +1,84 @@
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.stat {
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+}
+
+.stat span {
+  display: block;
+  color: var(--pico-muted-color);
+  font-size: 0.8rem;
+}
+
+.stat strong {
+  font-size: 1.35rem;
+}
+
+.chart-box {
+  position: relative;
+  height: 280px;
+  margin: 0.5rem 0 1.25rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  background: var(--pico-secondary-background);
+}
+
+.badge.passed {
+  background: #e5f6ea;
+  color: #146c36;
+}
+
+.badge.failed {
+  background: #fde8e8;
+  color: #9f1239;
+}
+
+.badge.skipped,
+.badge.inconclusive {
+  background: #eceff1;
+  color: #455a64;
+}
+
+pre.message {
+  white-space: pre-wrap;
+  max-height: 18rem;
+  overflow: auto;
+}
+
+td.wrap {
+  white-space: normal;
+}
+
+@media (prefers-color-scheme: dark) {
+  .badge.passed {
+    background: #12351f;
+    color: #8ee2ae;
+  }
+
+  .badge.failed {
+    background: #3f151c;
+    color: #ffb4c0;
+  }
+
+  .badge.skipped,
+  .badge.inconclusive {
+    background: #263238;
+    color: #eceff1;
+  }
+}
