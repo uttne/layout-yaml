@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "command": "python3 .cursor/hooks/allow-models.py",
+        "failClosed": true
+      }
+    ],
+    "subagentStart": [
+      {
+        "command": "python3 .cursor/hooks/allow-models.py",
+        "failClosed": true
+      }
+    ]
+  }
+}
