@@ -231,33 +231,41 @@ def post_pull_request_review(
     comments: list[dict],
     overflow: list[dict],
 ) -> None:
-    body = _review_body(summary, overflow)
+    if not comments:
+        replace_progress_comment(_review_body(summary, overflow))
+        return
     review = gh_api(
         "POST",
         f"repos/{repository}/pulls/{number}/reviews",
-        {"commit_id": head_sha, "body": body},
+        {"commit_id": head_sha},
     )
     if review is None or not isinstance(review.get("id"), int):
         print("Could not open a pull request review. Replacing the progress comment.", file=sys.stderr)
         post_conversation_fallback(summary, comments + overflow)
         return
     missed = list(overflow)
+    placed = 0
     for comment in comments:
-        if not add_review_comment(repository, number, review["id"], head_sha, comment):
+        if add_review_comment(repository, number, review["id"], head_sha, comment):
+            placed += 1
+        else:
             missed.append(comment)
-    if missed != overflow:
-        body = _review_body(summary, missed)
+    body = _review_body(summary, missed)
+    if placed == 0:
+        delete_pending_review(repository, number, review["id"])
+        replace_progress_comment(body)
+        return
     submitted = gh_api(
         "POST",
         f"repos/{repository}/pulls/{number}/reviews/{review['id']}/events",
-        {"event": "COMMENT", "body": body},
+        {"event": "COMMENT"},
     )
     if submitted is None:
         print("Could not submit the pull request review. Replacing the progress comment.", file=sys.stderr)
         delete_pending_review(repository, number, review["id"])
         post_conversation_fallback(summary, comments + overflow)
         return
-    print(f"Posted pull request review with {len(comments) - (len(missed) - len(overflow))} inline comments.")
+    print(f"Posted pull request review with {placed} inline comments.")
     replace_progress_comment(body)
 
 
