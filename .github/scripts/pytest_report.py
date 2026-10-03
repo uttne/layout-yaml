@@ -26,7 +26,8 @@ _OUTCOME_LABEL = {
 
 @dataclass(frozen=True)
 class Case:
-    nodeid: str
+    file: str
+    name: str
     outcome: str
     detail: str
 
@@ -35,19 +36,32 @@ def parse_junit(path: Path) -> list[Case]:
     root = ET.parse(path).getroot()
     cases: list[Case] = []
     for node in root.iter("testcase"):
-        name = node.attrib.get("name", "")
-        classname = node.attrib.get("classname", "")
-        file_name = node.attrib.get("file", "").replace("\\", "/")
-        if file_name and name:
-            nodeid = f"{file_name}::{name}"
-        elif classname and name:
-            nodeid = f"{classname}::{name}"
-        else:
-            nodeid = name or classname or "(unknown)"
+        file_name, test_name = _test_name(node)
         outcome, detail = _outcome(node)
-        cases.append(Case(nodeid=nodeid, outcome=outcome, detail=detail))
-    cases.sort(key=lambda case: (_OUTCOME_RANK.get(case.outcome, 9), case.nodeid))
+        cases.append(Case(file=file_name, name=test_name, outcome=outcome, detail=detail))
+    cases.sort(key=lambda case: (_OUTCOME_RANK.get(case.outcome, 9), case.file, case.name))
     return cases
+
+
+def _test_name(node: ET.Element) -> tuple[str, str]:
+    """Return the file and the test name from a JUnit testcase.
+
+    pytest stores the function (and parameters) in ``name``. Classes sit in
+    ``classname`` after the module path, so ``tests.test_lexer.TestBlock`` and
+    ``tests/test_lexer.py`` become ``TestBlock::test_lines``.
+    """
+    file_name = node.attrib.get("file", "").replace("\\", "/").strip()
+    classname = node.attrib.get("classname", "").strip()
+    name = node.attrib.get("name", "").strip() or "(unknown)"
+    if not file_name:
+        return classname or "(unknown)", name
+    module = file_name[:-3] if file_name.endswith(".py") else file_name
+    module = module.replace("/", ".")
+    prefix = module + "."
+    if classname.startswith(prefix):
+        qual = classname[len(prefix) :]
+        name = "::".join((*qual.split("."), name))
+    return file_name, name
 
 
 def _outcome(node: ET.Element) -> tuple[str, str]:
@@ -65,8 +79,49 @@ def _outcome(node: ET.Element) -> tuple[str, str]:
 
 
 def render(cases: list[Case], *, truncate: bool = True) -> str:
+    text = _compose(cases)
+    if not truncate or len(text) <= MAX_BODY_CHARS:
+        return text
+    without_passed = [case for case in cases if case.outcome != "passed"]
+    text = _compose(
+        without_passed,
+        notice="結果が多いため、成功の一覧は掲載していません。",
+        counted=cases,
+    )
+    if len(text) <= MAX_BODY_CHARS:
+        return text
+    without_details = [Case(case.file, case.name, case.outcome, "") for case in without_passed]
+    text = _compose(
+        without_details,
+        notice="結果が多いため、成功の一覧と各テストのメッセージは掲載していません。",
+        counted=cases,
+    )
+    if len(text) <= MAX_BODY_CHARS:
+        return text
+    failures = [case for case in without_details if case.outcome in {"failed", "error"}]
+    text = _compose(
+        failures,
+        notice="結果が多いため、失敗とエラーのテスト名だけを掲載しています。",
+        counted=cases,
+    )
+    if len(text) <= MAX_BODY_CHARS:
+        return text
+    return _compose(
+        [],
+        notice="結果が多いため、テスト一覧は掲載していません。",
+        counted=cases,
+    )
+
+
+def _compose(
+    shown: list[Case],
+    *,
+    notice: str = "",
+    counted: list[Case] | None = None,
+) -> str:
+    source = shown if counted is None else counted
     counts = {label: 0 for label in _OUTCOME_LABEL}
-    for case in cases:
+    for case in source:
         counts[case.outcome] = counts.get(case.outcome, 0) + 1
     lines = [
         MARKER,
@@ -80,39 +135,75 @@ def render(cases: list[Case], *, truncate: bool = True) -> str:
         ),
         "",
     ]
+    if notice:
+        lines.append(notice)
+        lines.append("")
     run_url = _run_url()
     if run_url:
         lines.append(f"[ログ]({run_url})")
         lines.append("")
-    if not cases:
-        lines.append("テストは 0 件でした。")
-        return "\n".join(lines) + "\n"
+    if not shown:
+        if counted is None:
+            lines.append("テストは 0 件でした。")
+        return "\n".join(lines).rstrip() + "\n"
 
-    lines.extend(["| 結果 | テスト |", "| --- | --- |"])
-    for case in cases:
-        label = _OUTCOME_LABEL.get(case.outcome, case.outcome)
-        nodeid = case.nodeid.replace("|", "\\|")
-        lines.append(f"| {label} | `{nodeid}` |")
-
-    problems = [case for case in cases if case.outcome in {"failed", "error"} and case.detail]
-    if problems:
-        lines.extend(["", "<details>", "<summary>失敗の詳細</summary>", ""])
-        for case in problems:
-            lines.append(f"### `{case.nodeid}`")
-            lines.append("")
-            lines.append("```")
-            lines.append(case.detail)
-            lines.append("```")
-            lines.append("")
+    for outcome in ("failed", "error", "skipped", "passed"):
+        group = [case for case in shown if case.outcome == outcome]
+        if not group:
+            continue
+        label = _OUTCOME_LABEL.get(outcome, outcome)
+        open_attr = " open" if outcome in {"failed", "error"} else ""
+        lines.append(f"<details{open_attr}>")
+        lines.append(f"<summary>{label} {len(group)}</summary>")
+        lines.append("")
+        lines.extend(_render_files(group))
+        lines.append("")
         lines.append("</details>")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
 
-    text = "\n".join(lines).rstrip() + "\n"
-    if len(text) <= MAX_BODY_CHARS or not truncate:
-        return text[:MAX_BODY_CHARS]
-    kept = [case for case in cases if case.outcome != "passed"]
-    shortened = render(kept, truncate=False)
-    notice = "結果が多いため、失敗とエラーだけを掲載しています。\n\n"
-    return shortened.replace(MARKER + "\n", MARKER + "\n" + notice, 1)[:MAX_BODY_CHARS]
+
+def _render_files(cases: list[Case]) -> list[str]:
+    grouped: dict[str, list[Case]] = {}
+    order: list[str] = []
+    for case in cases:
+        bucket = grouped.setdefault(case.file, [])
+        if not bucket:
+            order.append(case.file)
+        bucket.append(case)
+    lines = ["<ul>"]
+    for file_name in order:
+        lines.append(f"<li><code>{_html_text(file_name)}</code>")
+        lines.append("<ul>")
+        for case in grouped[file_name]:
+            lines.append(f"<li><code>{_html_text(case.name)}</code>")
+            if case.detail:
+                lines.append("<pre>")
+                lines.append(_pre_text(case.detail))
+                lines.append("</pre>")
+            lines.append("</li>")
+        lines.append("</ul>")
+        lines.append("</li>")
+    lines.append("</ul>")
+    return lines
+
+
+def _pre_text(detail: str) -> str:
+    """Escape a traceback for ``<pre>`` without emitting a blank source line.
+
+    The surrounding list is one HTML block, and that block ends at a blank
+    line. A whitespace-only line counts as blank, so those lines become a
+    non-breaking space and still look empty inside the traceback.
+    """
+    normalized = detail.replace("\r\n", "\n").replace("\r", "\n")
+    kept: list[str] = []
+    for line in _html_text(normalized).split("\n"):
+        kept.append(line if line.strip(" \t") else "\u00a0")
+    return "\n".join(kept)
+
+
+def _html_text(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _run_url() -> str:
