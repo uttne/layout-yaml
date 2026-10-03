@@ -1,0 +1,57 @@
+# pytest and ruff. Python 3.12 is set here; the repo does not commit .python-version.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv and Python 3.12
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      # --frozen fails when uv.lock and pyproject.toml disagree.
+      # Issue #14 says `uv sync`; the lock check was added on purpose.
+      - name: Sync dependencies
+        id: sync
+        run: uv sync --frozen
+
+      - name: Ruff
+        if: steps.sync.outcome == 'success'
+        run: uv run ruff check .
+
+      - name: Ruff format
+        if: steps.sync.outcome == 'success'
+        run: uv run ruff format --check .
+
+      - name: Pytest
+        id: pytest
+        if: steps.sync.outcome == 'success'
+        run: uv run pytest --junitxml="${{ runner.temp }}/pytest-results.xml" -o junit_family=legacy
+
+      # A comment-post failure must not fail the job. Pytest and Ruff do.
+      - name: Publish pytest results
+        if: steps.pytest.outcome == 'success' || steps.pytest.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python3 .github/scripts/pytest_report.py "${{ runner.temp }}/pytest-results.xml"
