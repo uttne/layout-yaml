@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -29,13 +30,25 @@ jobs:
           enable-cache: true
 
       - name: Sync dependencies
+        id: sync
         run: uv sync --frozen
 
       - name: Ruff
+        if: steps.sync.outcome == 'success'
         run: uv run ruff check .
 
       - name: Ruff format
+        if: steps.sync.outcome == 'success'
         run: uv run ruff format --check .
 
       - name: Pytest
-        run: uv run pytest
+        id: pytest
+        if: steps.sync.outcome == 'success'
+        run: uv run pytest --junitxml="${{ runner.temp }}/pytest-results.xml" -o junit_family=legacy
+
+      - name: Publish pytest results
+        if: steps.pytest.outcome == 'success' || steps.pytest.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python3 .github/scripts/pytest_report.py "${{ runner.temp }}/pytest-results.xml"
