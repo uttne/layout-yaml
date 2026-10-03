@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Push the go branch without workflow file changes, open a PR if needed,
-# and upsert one Issue comment that records implementation progress.
+# and replace the progress comment with the implementation record.
 
 set -euo pipefail
 

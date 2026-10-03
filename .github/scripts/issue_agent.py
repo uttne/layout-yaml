@@ -137,7 +137,7 @@ def render_body(mode: str, stage: str, active_index: int, note: str) -> str:
         "@agent Issue 進捗",
         meta,
         agentlib.checkpoint_rows(checkpoints(mode), stage, active_index),
-        "_このコメントはチェックポイントごとに自動更新されます。_",
+        agentlib.PROGRESS_CLOSING,
         extra=note_section,
     )
 
@@ -168,15 +168,26 @@ def update_progress(stage: str) -> None:
     repository = require_env("REPOSITORY")
     issue = require_env("ISSUE_NUMBER")
     require_env("GH_TOKEN")
+    id_path = comment_id_path()
+    if agentlib.result_already_written(id_path):
+        print(f"Result already written; skip progress update (mode={mode}, stage={stage}).")
+        return
+    if stage == "failed":
+        comment_id = agentlib.write_result(
+            id_path,
+            "ISSUE_NUMBER",
+            agentlib.failure_comment(f"@agent {mode}"),
+        )
+        print(f"Issue progress replaced with failure (mode={mode}, id={comment_id}).")
+        return
 
-    if stage in {"failed", "note"}:
+    if stage == "note":
         active_index = load_active_index()
     else:
         active_index = stage_index(mode, stage)
         save_active_index(active_index)
 
     body = render_body(mode, stage, active_index, read_note(note_path()))
-    id_path = comment_id_path()
     if stage == "note" and not id_path.is_file():
         print("No progress comment yet; skip note update.")
         return
@@ -247,12 +258,9 @@ def run_agent() -> None:
     if not reply_path.is_file() or reply_path.stat().st_size == 0:
         raise SystemExit(f"Plan reply was not written to {reply_path}.")
     update_progress("posting")
-    posted = reply_path.with_name(reply_path.name + ".posted")
-    posted.write_text(reply_path.read_text(encoding="utf-8") + agentlib.agent_footer("`@agent plan`"), encoding="utf-8")
-    agentlib.gh(
-        ["issue", "comment", require_env("ISSUE_NUMBER"), "--repo", require_env("REPOSITORY"), "--body-file", str(posted)]
-    )
-    print(f"Posted plan reply on issue #{require_env('ISSUE_NUMBER')}.")
+    reply = reply_path.read_text(encoding="utf-8") + agentlib.agent_footer("`@agent plan`")
+    comment_id = agentlib.write_result(comment_id_path(), "ISSUE_NUMBER", reply)
+    print(f"Replaced progress comment {comment_id} with the plan reply.")
 
 
 def substitute(text: str) -> str:
@@ -475,6 +483,8 @@ def sync_record() -> None:
     body_path.write_text(updated, encoding="utf-8")
     gh_out(["issue", "edit", issue, "--repo", repository, "--body-file", str(body_path)])
     comment = record_comment(branch, pr_url, head, head_full, status)
+    comment_id = agentlib.write_result(comment_id_path(), "ISSUE_NUMBER", comment)
+    print(f"Replaced progress comment {comment_id} with the go record.")
     ids = gh_out(
         [
             "api",
@@ -484,12 +494,20 @@ def sync_record() -> None:
             '.[] | select(.body | contains("layout-yaml-agent-go")) | .id',
         ]
     ).split()
-    if ids:
-        gh_api("PATCH", f"repos/{repository}/issues/comments/{ids[-1]}", comment)
-        print(f"Updated go progress comment {ids[-1]}.")
-    else:
-        gh_api("POST", f"repos/{repository}/issues/{issue}/comments", comment)
-        print("Posted go progress comment.")
+    for other in ids:
+        if other == comment_id:
+            continue
+        agentlib.gh(
+            [
+                "api",
+                "--method",
+                "DELETE",
+                "-H",
+                "Accept: application/vnd.github+json",
+                f"repos/{repository}/issues/comments/{other}",
+            ]
+        )
+        print(f"Removed previous go record {other}.")
 
 
 def main() -> None:

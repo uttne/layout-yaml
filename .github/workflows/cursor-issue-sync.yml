@@ -3,7 +3,7 @@
 # Trigger: comment on an Issue (not a PR) from the repository owner:
 #   @agent sync
 #
-# Posts a sync record comment documenting which comments were reflected.
+# Replaces the progress comment with a sync record of which comments were reflected.
 # Prompt: .github/workflows/prompts/issue-agent-sync.md
 #
 # Model: Composer 2.5 chooses Composer 2.5 or Grok 4.7 medium from the
@@ -131,15 +131,12 @@ jobs:
           SYNC_RECORD_OUTPUT_PATH: ${{ runner.temp }}/issue-sync-record.md
         run: python3 .github/scripts/issue_sync.py
 
-      - name: Progress — completed
-        if: success() && steps.parse.outputs.invalid != 'true'
-        run: python3 .github/scripts/agentlib.py progress sync completed
-
       - name: Report failure on issue
         if: failure() && steps.parse.outputs.invalid != 'true'
         run: |
           set -euo pipefail
-          if [[ -f "$RUNNER_TEMP/issue-sync-progress-comment-id" ]]; then
-            python3 .github/scripts/agentlib.py progress sync failed || true
+          if [[ -f "$RUNNER_TEMP/issue-sync-progress-comment-id.final" ]]; then
+            echo "Result comment already written."
+            exit 0
           fi
-          gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body "⚠️ \`@agent sync\` を完了できませんでした。進捗コメントと [ワークフロー実行]($RUN_URL) を確認してください。"
+          python3 .github/scripts/agentlib.py progress sync failed || true

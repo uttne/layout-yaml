@@ -191,6 +191,16 @@ def checkpoint_rows(labels: tuple[str, ...], stage: str, active_index: int) -> s
     return "\n".join(lines)
 
 
+PROGRESS_CLOSING = "_このコメントは完了時に結果で上書きされます。_"
+
+
+def failure_comment(heading: str) -> str:
+    return (
+        f"## {heading}\n\n"
+        f"⚠️ 完了できませんでした。[ワークフロー実行]({run_url()}) を確認してください。\n"
+    )
+
+
 def progress_document(title: str, meta_lines: list[str], table: str, closing: str, extra: str = "") -> str:
     meta = "\n".join(line for line in meta_lines if line)
     extra_block = extra if extra else ""
@@ -428,14 +438,19 @@ def select_model_and_parse() -> None:
         apply_model_choice("composer")
 
 
-def _load_index(path: Path) -> int:
-    if not path.is_file():
-        return 0
-    raw = path.read_text(encoding="utf-8").strip()
-    try:
-        return int(raw)
-    except ValueError:
-        return 0
+def result_marker(id_path: Path) -> Path:
+    return Path(str(id_path) + ".final")
+
+
+def result_already_written(id_path: Path) -> bool:
+    return result_marker(id_path).is_file()
+
+
+def write_result(id_path: Path, number_env: str, body: str) -> str:
+    """Replace the progress comment with the final result."""
+    comment_id = _upsert_progress(id_path, number_env, body)
+    result_marker(id_path).write_text("1\n", encoding="utf-8")
+    return comment_id
 
 
 def _upsert_progress(id_path: Path, number_env: str, body: str) -> str:
@@ -508,7 +523,7 @@ def update_workflow_progress(kind: str, stage: str) -> None:
     if kind == "sync":
         labels, stages = SYNC_CHECKPOINTS, SYNC_STAGES
         title = "@agent sync 進捗"
-        closing = "_このコメントはチェックポイントごとに自動更新されます。_"
+        failure_heading = "@agent sync"
         id_name = "issue-sync-progress-comment-id"
         index_name = "issue-sync-progress-active-index"
         number_env = "ISSUE_NUMBER"
@@ -516,7 +531,7 @@ def update_workflow_progress(kind: str, stage: str) -> None:
     elif kind == "pr":
         labels, stages = PR_CHECKPOINTS, PR_STAGES
         title = "@agent レビュー進捗"
-        closing = "_このコメントはチェックポイントごとに自動更新されます。完了後に別コメントでレビュー本文を投稿します。_"
+        failure_heading = "@agent レビュー"
         id_name = "pr-review-progress-comment-id"
         index_name = "pr-review-progress-active-index"
         number_env = "PR_NUMBER"
@@ -524,14 +539,24 @@ def update_workflow_progress(kind: str, stage: str) -> None:
     else:
         raise SystemExit(f"Unknown progress kind: {kind}")
 
-    index_path = runner_temp() / index_name
+    id_path = runner_temp() / id_name
+    if result_already_written(id_path):
+        print(f"Result already written; skip progress update (kind={kind}, stage={stage}).")
+        return
     if stage == "failed":
-        active_index = _load_index(index_path)
-    else:
-        active_index = stages.get(stage, 0)
-        index_path.write_text(f"{active_index}\n", encoding="utf-8")
-    body = progress_document(title, meta, checkpoint_rows(labels, stage, active_index), closing)
-    comment_id = _upsert_progress(runner_temp() / id_name, number_env, body)
+        comment_id = write_result(id_path, number_env, failure_comment(failure_heading))
+        print(f"Progress comment replaced with failure (kind={kind}, id={comment_id}).")
+        return
+    index_path = runner_temp() / index_name
+    active_index = stages.get(stage, 0)
+    index_path.write_text(f"{active_index}\n", encoding="utf-8")
+    body = progress_document(
+        title,
+        meta,
+        checkpoint_rows(labels, stage, active_index),
+        PROGRESS_CLOSING,
+    )
+    comment_id = _upsert_progress(id_path, number_env, body)
     print(f"Progress comment updated (kind={kind}, stage={stage}, id={comment_id}).")
 
 

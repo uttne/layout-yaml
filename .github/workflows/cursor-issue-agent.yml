@@ -185,12 +185,6 @@ jobs:
           ISSUE_REPLY_OUTPUT_PATH: ${{ runner.temp }}/issue-agent-reply.md
         run: python3 .github/scripts/issue_agent.py run
 
-      - name: Progress — plan completed
-        if: success() && steps.parse.outputs.mode == 'plan'
-        env:
-          AGENT_MODE: plan
-        run: python3 .github/scripts/issue_agent.py progress completed
-
       - name: Run @agent go
         id: go_agent
         if: steps.parse.outputs.invalid != 'true' && steps.parse.outputs.mode == 'go'
@@ -229,15 +223,6 @@ jobs:
         if: steps.go_agent.outcome == 'failure'
         run: exit 1
 
-      - name: Progress — go completed
-        if: success() && steps.parse.outputs.mode == 'go'
-        env:
-          AGENT_MODE: go
-          WORK_BRANCH: ${{ steps.branch.outputs.work_branch }}
-          BRANCH_NAME: ${{ steps.branch.outputs.work_branch }}
-          AGENT_NOTE_PATH: ${{ runner.temp }}/go-note.md
-        run: python3 "${ISSUE_AGENT_PY:-.github/scripts/issue_agent.py}" progress completed
-
       - name: Report failure on issue
         if: failure() && steps.parse.outputs.invalid != 'true'
         env:
@@ -247,7 +232,8 @@ jobs:
           AGENT_NOTE_PATH: ${{ runner.temp }}/go-note.md
         run: |
           set -euo pipefail
-          if [[ -f "$RUNNER_TEMP/issue-agent-progress-comment-id" ]]; then
-            python3 "${ISSUE_AGENT_PY:-.github/scripts/issue_agent.py}" progress failed || true
+          if [[ -f "$RUNNER_TEMP/issue-agent-progress-comment-id.final" ]]; then
+            echo "Result comment already written."
+            exit 0
           fi
-          gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body "⚠️ \`@agent ${AGENT_MODE}\` を完了できませんでした。進捗コメントと [ワークフロー実行]($RUN_URL) を確認してください。"
+          python3 "${ISSUE_AGENT_PY:-.github/scripts/issue_agent.py}" progress failed || true

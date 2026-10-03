@@ -76,5 +76,6 @@ synced_comment_ids: （決定の根拠にした人間・合意コメントの id
 
 - 本文全文 → `$ISSUE_BODY_OUTPUT_PATH` のみ
 - 同期記録 → `$SYNC_RECORD_OUTPUT_PATH` のみ
+- ワークフローが、経過コメントを同期記録で上書きする。結果用の別コメントは作らない。
 
 <!-- PROJECT_ISSUE_CONTEXT -->

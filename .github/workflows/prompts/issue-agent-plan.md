@@ -49,6 +49,8 @@ gh api --paginate "repos/$REPOSITORY/issues/$ISSUE_NUMBER/comments"
 
 Markdown を次のファイルに**だけ**書く: `$ISSUE_REPLY_OUTPUT_PATH`
 
+ワークフローが、経過コメントをこの内容で上書きする。結果用の別コメントは作らない。
+
 日本語。見出し `## 実装方針` は初回か、方針が大きく変わったときだけ。続きは普通の返答でよい（「了解です。」から入ってよい）。
 
 ## 禁止

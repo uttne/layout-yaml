@@ -238,8 +238,8 @@ def post_pull_request_review(
         {"commit_id": head_sha, "body": body},
     )
     if review is None or not isinstance(review.get("id"), int):
-        print("Could not open a pull request review. Posting a conversation comment.", file=sys.stderr)
-        post_conversation_fallback(repository, number, summary, comments + overflow)
+        print("Could not open a pull request review. Replacing the progress comment.", file=sys.stderr)
+        post_conversation_fallback(summary, comments + overflow)
         return
     missed = list(overflow)
     for comment in comments:
@@ -253,11 +253,12 @@ def post_pull_request_review(
         {"event": "COMMENT", "body": body},
     )
     if submitted is None:
-        print("Could not submit the pull request review. Posting a conversation comment.", file=sys.stderr)
+        print("Could not submit the pull request review. Replacing the progress comment.", file=sys.stderr)
         delete_pending_review(repository, number, review["id"])
-        post_conversation_fallback(repository, number, summary, comments + overflow)
+        post_conversation_fallback(summary, comments + overflow)
         return
     print(f"Posted pull request review with {len(comments) - (len(missed) - len(overflow))} inline comments.")
+    replace_progress_comment(body)
 
 
 def _review_body(summary: str, unplaced: list[dict]) -> str:
@@ -304,14 +305,21 @@ def delete_pending_review(repository: str, number: str, review_id: int) -> None:
     )
 
 
-def post_conversation_fallback(repository: str, number: str, summary: str, comments: list[dict]) -> None:
+def replace_progress_comment(body: str) -> None:
+    comment_id = agentlib.write_result(
+        agentlib.runner_temp() / "pr-review-progress-comment-id",
+        "PR_NUMBER",
+        body,
+    )
+    print(f"Replaced progress comment {comment_id} with the review result.")
+
+
+def post_conversation_fallback(summary: str, comments: list[dict]) -> None:
     text = summary.rstrip()
     if comments:
         text += "\n\n" + unplaced_section(comments).rstrip()
     text += agentlib.agent_footer("review")
-    posted = agentlib.runner_temp() / "pr-review-fallback.md"
-    posted.write_text(text, encoding="utf-8")
-    agentlib.gh(["pr", "comment", number, "--repo", repository, "--body-file", str(posted)])
+    replace_progress_comment(text)
 
 
 def gh_api(method: str, endpoint: str, payload: dict) -> dict | None:

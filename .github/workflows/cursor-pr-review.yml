@@ -152,19 +152,14 @@ jobs:
           REVIEW_OUTPUT_PATH: ${{ runner.temp }}/pr-review.md
         run: python3 "$PR_REVIEW"
 
-      - name: Progress — completed
-        if: success()
-        env:
-          PR_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
-        run: python3 "$AGENTLIB" progress pr completed
-
       - name: Report failure on pull request
         if: failure()
         env:
           PR_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
         run: |
           set -euo pipefail
-          if [[ -f "$RUNNER_TEMP/pr-review-progress-comment-id" ]]; then
-            python3 "$AGENTLIB" progress pr failed || true
+          if [[ -f "$RUNNER_TEMP/pr-review-progress-comment-id.final" ]]; then
+            echo "Result comment already written."
+            exit 0
           fi
-          gh pr comment "$PR_NUMBER" --repo "$REPOSITORY" --body "⚠️ @agent レビューを完了できませんでした。進捗コメントと [ワークフロー実行]($RUN_URL) を確認してください。"
+          python3 "$AGENTLIB" progress pr failed || true

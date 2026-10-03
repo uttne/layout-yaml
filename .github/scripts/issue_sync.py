@@ -83,10 +83,13 @@ def main() -> None:
     agentlib.gh(["issue", "edit", number, "--repo", repository, "--body-file", str(body_path)])
     print(f"Updated issue #{number} body.")
     agentlib.update_workflow_progress("sync", "posting_record")
-    posted = record_path.with_name(record_path.name + ".posted")
-    posted.write_text(record_path.read_text(encoding="utf-8") + agentlib.agent_footer("`@agent sync`"), encoding="utf-8")
-    agentlib.gh(["issue", "comment", number, "--repo", repository, "--body-file", str(posted)])
-    print(f"Posted sync record on issue #{number}.")
+    record = record_path.read_text(encoding="utf-8") + agentlib.agent_footer("`@agent sync`")
+    comment_id = agentlib.write_result(
+        agentlib.runner_temp() / "issue-sync-progress-comment-id",
+        "ISSUE_NUMBER",
+        record,
+    )
+    print(f"Replaced progress comment {comment_id} with the sync record.")
 
 
 if __name__ == "__main__":
