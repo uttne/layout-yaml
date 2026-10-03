@@ -201,6 +201,54 @@ def failure_comment(heading: str) -> str:
     )
 
 
+def requester_mention() -> str:
+    """GitHub login of the person who asked, when that login is unambiguous."""
+    login = os.environ.get("TRIGGERED_BY", "").strip().lstrip("@")
+    if re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?", login):
+        return f"@{login}"
+    return ""
+
+
+def with_requester(body: str) -> str:
+    mention = requester_mention()
+    if not mention:
+        return body
+    return f"{mention}\n\n{body.lstrip()}"
+
+
+def progress_context_lines() -> list[str]:
+    """Who asked, and which comment this run is for. Backticks block mentions."""
+    lines: list[str] = []
+    login = os.environ.get("TRIGGERED_BY", "").strip().lstrip("@")
+    if re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?", login):
+        lines.append(f"依頼: `@{login}`")
+    comment_id = os.environ.get("COMMENT_ID", "").strip()
+    if not comment_id.isdigit():
+        return lines
+    url = _trigger_comment_url(comment_id)
+    if url:
+        lines.append(f"対象コメント: [{comment_id}]({url})")
+    else:
+        lines.append(f"対象コメント: `{comment_id}`")
+    return lines
+
+
+def _trigger_comment_url(comment_id: str) -> str:
+    server = os.environ.get("GITHUB_SERVER_URL", "https://github.com").rstrip("/")
+    repo = os.environ.get("GITHUB_REPOSITORY") or os.environ.get("REPOSITORY", "")
+    pr_number = os.environ.get("PR_NUMBER", "").strip()
+    issue_number = os.environ.get("ISSUE_NUMBER", "").strip()
+    if pr_number.isdigit():
+        kind, number = "pull", pr_number
+    elif issue_number.isdigit():
+        kind, number = "issues", issue_number
+    else:
+        return ""
+    if not repo:
+        return ""
+    return f"{server}/{repo}/{kind}/{number}#issuecomment-{comment_id}"
+
+
 def progress_document(title: str, meta_lines: list[str], table: str, closing: str, extra: str = "") -> str:
     meta = "\n".join(line for line in meta_lines if line)
     extra_block = extra if extra else ""
@@ -448,7 +496,7 @@ def result_already_written(id_path: Path) -> bool:
 
 def write_result(id_path: Path, number_env: str, body: str) -> str:
     """Replace the progress comment with the final result."""
-    comment_id = _upsert_progress(id_path, number_env, body)
+    comment_id = _upsert_progress(id_path, number_env, with_requester(body))
     result_marker(id_path).write_text("1\n", encoding="utf-8")
     return comment_id
 
@@ -493,10 +541,7 @@ def _upsert_progress(id_path: Path, number_env: str, body: str) -> str:
 
 
 def _sync_meta() -> list[str]:
-    lines = ["モード: `@agent sync`"]
-    triggered_by = os.environ.get("TRIGGERED_BY", "")
-    if triggered_by:
-        lines.append(f"依頼: @{triggered_by}")
+    lines = ["モード: `@agent sync`", *progress_context_lines()]
     label = model_label()
     if label:
         lines.append(f"モデル: {label}")
@@ -504,10 +549,7 @@ def _sync_meta() -> list[str]:
 
 
 def _pr_meta() -> list[str]:
-    lines: list[str] = []
-    triggered_by = os.environ.get("TRIGGERED_BY", "")
-    if triggered_by:
-        lines.append(f"依頼: @{triggered_by}  ")
+    lines = progress_context_lines()
     head = os.environ.get("PR_HEAD_SHA", "")
     if len(head) > 7:
         head = head[:7]

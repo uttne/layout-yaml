@@ -122,10 +122,7 @@ def save_active_index(index: int) -> None:
 
 
 def render_body(mode: str, stage: str, active_index: int, note: str) -> str:
-    meta = [f"モード: `@agent {mode}`"]
-    triggered_by = os.environ.get("TRIGGERED_BY", "")
-    if triggered_by:
-        meta.append(f"依頼: @{triggered_by}")
+    meta = [f"モード: `@agent {mode}`", *agentlib.progress_context_lines()]
     branch = os.environ.get("BRANCH_NAME", "")
     if branch:
         meta.append(f"ブランチ: `{branch}`")
