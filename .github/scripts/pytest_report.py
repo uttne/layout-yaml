@@ -211,10 +211,18 @@ def main(argv: list[str]) -> int:
     body = render(cases)
     write_summary(body)
     pr = os.environ.get("PR_NUMBER", "").strip()
-    if pr:
-        upsert_comment(pr, body)
-    else:
+    if not pr:
         print("PR_NUMBER is unset; skipped the pull request comment.")
+        return 0
+    try:
+        upsert_comment(pr, body)
+    except SystemExit as exc:
+        detail = exc.code if isinstance(exc.code, str) else "pull request comment failed"
+        print(detail, file=sys.stderr)
+        print(
+            "Pull request comment was not updated. The pytest result still stands.",
+            file=sys.stderr,
+        )
     return 0
 
 
