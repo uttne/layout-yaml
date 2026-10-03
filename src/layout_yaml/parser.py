@@ -28,6 +28,9 @@ class _Parser:
         self.tokens = stream.tokens
         self.pos = 0
         self.indent_depth = 0
+        # Source offset where the next entry's leading indent starts, when that
+        # indent sits before a zero-width DEDENT and has already been advanced.
+        self._queued_entry_start: int | None = None
 
     def parse_document(self) -> Document:
         doc_start = 0
@@ -96,7 +99,11 @@ class _Parser:
         return False
 
     def _parse_mapping_entry(self) -> MappingEntry:
-        entry_start = self._current_start()
+        if self._queued_entry_start is not None:
+            entry_start = self._queued_entry_start
+            self._queued_entry_start = None
+        else:
+            entry_start = self._current_start()
         self._consume_entry_leading()
         entry_start = min(entry_start, self._current_start())
         key = self._parse_key_scalar()
@@ -143,13 +150,15 @@ class _Parser:
         self._unsupported(f"value after colon: {kind}")
 
     def _parse_inline_scalar_value(self) -> ScalarNode:
-        if self._peek_kind() == TokenKind.WHITESPACE:
+        if not self._at_end() and self._peek_kind() == TokenKind.WHITESPACE:
             self._advance()
+        if self._at_end():
+            self._error("expected inline scalar value")
         if self._peek_kind() == TokenKind.PLAIN_SCALAR:
             token = self._expect(TokenKind.PLAIN_SCALAR)
-            while self._peek_kind() == TokenKind.WHITESPACE:
+            while not self._at_end() and self._peek_kind() == TokenKind.WHITESPACE:
                 self._advance()
-            if self._peek_kind() == TokenKind.NEWLINE:
+            if not self._at_end() and self._peek_kind() == TokenKind.NEWLINE:
                 self._advance()
             return PlainScalar(token.start, token.end)
         if self._peek_kind() in (TokenKind.DOUBLE_QUOTE, TokenKind.SINGLE_QUOTE):
@@ -207,18 +216,51 @@ class _Parser:
         return None
 
     def _parse_block_sequence(self) -> BlockSequence:
-        seq_start = self._current_start()
         items: list[SequenceItem] = []
         while True:
-            self._skip_indent_padding()
-            if self._at_end() or self._peek_kind() != TokenKind.LIST_ENTRY:
+            if self._at_end() or self._peek_kind() == TokenKind.DEDENT:
+                break
+            if (
+                self._peek_kind() == TokenKind.WHITESPACE
+                and self._whitespace_precedes_dedent()
+            ):
+                break
+            if self._peek_kind() not in (
+                TokenKind.LIST_ENTRY,
+                TokenKind.WHITESPACE,
+                TokenKind.INDENT,
+            ):
                 break
             items.append(self._parse_sequence_item())
+        seq_start = items[0].start if items else self._current_start()
         seq_end = items[-1].end if items else seq_start
         return BlockSequence(seq_start, seq_end, tuple(items))
 
+    def _sequence_item_start(self) -> int:
+        """Line indent before ``-`` belongs to the item, including the first."""
+        if self._at_end():
+            return len(self.source)
+        if self._peek_kind() == TokenKind.WHITESPACE:
+            return self._current_start()
+        if self._peek_kind() == TokenKind.LIST_ENTRY:
+            i = self.pos - 1
+            while i >= 0 and self.tokens[i].kind == TokenKind.INDENT:
+                i -= 1
+            if (
+                i >= 0
+                and self.tokens[i].kind == TokenKind.WHITESPACE
+                and self.tokens[i].end == self.tokens[self.pos].start
+            ):
+                return self.tokens[i].start
+        return self._current_start()
+
     def _parse_sequence_item(self) -> SequenceItem:
-        item_start = self._current_start()
+        item_start = self._sequence_item_start()
+        while not self._at_end() and self._peek_kind() in (
+            TokenKind.WHITESPACE,
+            TokenKind.INDENT,
+        ):
+            self._advance()
         self._expect(TokenKind.LIST_ENTRY)
         if self._peek_kind() == TokenKind.WHITESPACE:
             self._advance()
@@ -272,15 +314,22 @@ class _Parser:
         A standalone ``#`` line that sits directly above the next key (no blank
         line between the comment block and the key) stays for that key's leading
         trivia, including the key line's indent. A trailing ``#`` with no
-        following key stays on this entry.
+        following key stays on this entry. Indent of an outer key (whitespace
+        before ``DEDENT``) is not part of this entry.
         """
-        end = self._prev_end()
+        end = self._cap_end(self._prev_end())
         if not self._line_already_ended():
             end = self._consume_same_line_trailing(end)
         boundary = self._next_sibling_leading_index()
         if boundary is None:
-            return self._consume_until_structural(end)
-        return self._consume_until_index(boundary, end)
+            return self._cap_end(self._consume_until_structural(end))
+        return self._cap_end(self._consume_until_index(boundary, end))
+
+    def _cap_end(self, end: int) -> int:
+        queued = self._queued_entry_start
+        if queued is not None and queued < end:
+            return queued
+        return end
 
     def _line_already_ended(self) -> bool:
         end = self._prev_end()
@@ -308,6 +357,8 @@ class _Parser:
     def _consume_until_structural(self, end: int) -> int:
         while not self._at_end():
             kind = self._peek_kind()
+            if kind == TokenKind.WHITESPACE and self._whitespace_precedes_dedent():
+                break
             if kind not in (
                 TokenKind.WHITESPACE,
                 TokenKind.COMMENT,
@@ -317,6 +368,18 @@ class _Parser:
             self._advance()
             end = self._prev_end()
         return end
+
+    def _whitespace_precedes_dedent(self) -> bool:
+        """Line indent of an outer key, sitting in the token stream before DEDENT."""
+        j = self.pos
+        tokens = self.tokens
+        n = len(tokens)
+        if j >= n or tokens[j].kind != TokenKind.WHITESPACE:
+            return False
+        j += 1
+        while j < n and tokens[j].kind == TokenKind.WHITESPACE:
+            j += 1
+        return j < n and tokens[j].kind == TokenKind.DEDENT
 
     def _next_sibling_leading_index(self) -> int | None:
         """Token index where the next sibling entry's leading trivia starts."""
@@ -404,16 +467,25 @@ class _Parser:
             self._advance()
 
     def _finish_indented_block(self) -> None:
-        while not self._at_end():
-            kind = self._peek_kind()
-            if kind == TokenKind.NEWLINE:
+        while not self._at_end() and self._peek_kind() == TokenKind.NEWLINE:
+            self._advance()
+        if self._at_end():
+            return
+        if self._peek_kind() == TokenKind.DEDENT:
+            self._advance()
+            self.indent_depth = max(0, self.indent_depth - 1)
+            return
+        # Outer key indent is before the zero-width DEDENT. Advance past both
+        # so the parent can see the next key, but keep the indent offset for
+        # that key's entry start. Taking start after the advance would drop it.
+        if self._whitespace_precedes_dedent():
+            if self._queued_entry_start is None:
+                self._queued_entry_start = self._current_start()
+            while not self._at_end() and self._peek_kind() == TokenKind.WHITESPACE:
                 self._advance()
-                continue
-            if kind == TokenKind.DEDENT:
+            if not self._at_end() and self._peek_kind() == TokenKind.DEDENT:
                 self._advance()
                 self.indent_depth = max(0, self.indent_depth - 1)
-                break
-            break
 
     def _peek_kind(self) -> TokenKind:
         if self._at_end():
