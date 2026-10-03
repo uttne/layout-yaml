@@ -97,4 +97,5 @@ jobs:
         uses: actions/deploy-pages@v4
 
       - name: Summarize
-        run: echo "テスト結果: ${{ steps.deployment.outputs.page_url }}" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo "テスト結果: ${{ steps.deployment.outputs.page_url }}" >> "$GITHUB_STEP_SUMMARY"
