@@ -87,12 +87,12 @@ class _Parser:
         if self._at_end():
             return False
         kind = self._peek_kind()
-        if kind == TokenKind.DEDENT:
+        if kind in (TokenKind.DEDENT, TokenKind.NEWLINE):
             return False
-        if kind == TokenKind.COMMENT:
-            return True
         if kind == TokenKind.PLAIN_SCALAR:
             return True
+        if kind in (TokenKind.COMMENT, TokenKind.WHITESPACE):
+            return self._next_sibling_leading_index() is not None
         return False
 
     def _parse_mapping_entry(self) -> MappingEntry:
@@ -106,10 +106,17 @@ class _Parser:
         return MappingEntry(entry_start, entry_end, key, value)
 
     def _consume_entry_leading(self) -> None:
-        while self._peek_kind() == TokenKind.COMMENT:
-            self._advance()
-            if self._peek_kind() == TokenKind.NEWLINE:
+        while not self._at_end():
+            kind = self._peek_kind()
+            if kind in (TokenKind.WHITESPACE, TokenKind.NEWLINE):
                 self._advance()
+                continue
+            if kind == TokenKind.COMMENT:
+                self._advance()
+                if not self._at_end() and self._peek_kind() == TokenKind.NEWLINE:
+                    self._advance()
+                continue
+            break
 
     def _parse_key_scalar(self) -> PlainScalar:
         token = self._expect(TokenKind.PLAIN_SCALAR)
@@ -260,19 +267,96 @@ class _Parser:
         return end
 
     def _consume_entry_trailing(self) -> int:
+        """Keep same-line comments, that line's break, and following blank lines.
+
+        A standalone ``#`` line that sits directly above the next key (no blank
+        line between the comment block and the key) stays for that key's leading
+        trivia, including the key line's indent. A trailing ``#`` with no
+        following key stays on this entry.
+        """
         end = self._prev_end()
+        if not self._line_already_ended():
+            end = self._consume_same_line_trailing(end)
+        boundary = self._next_sibling_leading_index()
+        if boundary is None:
+            return self._consume_until_structural(end)
+        return self._consume_until_index(boundary, end)
+
+    def _line_already_ended(self) -> bool:
+        end = self._prev_end()
+        return end > 0 and self.source[end - 1] in "\r\n"
+
+    def _consume_same_line_trailing(self, end: int) -> int:
         while not self._at_end():
             kind = self._peek_kind()
-            if kind == TokenKind.DEDENT:
-                break
-            if kind == TokenKind.PLAIN_SCALAR and self._peek_ahead_colon():
-                break
-            if kind in (TokenKind.WHITESPACE, TokenKind.COMMENT, TokenKind.NEWLINE):
+            if kind in (TokenKind.WHITESPACE, TokenKind.COMMENT):
                 self._advance()
                 end = self._prev_end()
                 continue
+            if kind == TokenKind.NEWLINE:
+                self._advance()
+                end = self._prev_end()
             break
         return end
+
+    def _consume_until_index(self, index: int, end: int) -> int:
+        while self.pos < index:
+            self._advance()
+            end = self._prev_end()
+        return end
+
+    def _consume_until_structural(self, end: int) -> int:
+        while not self._at_end():
+            kind = self._peek_kind()
+            if kind not in (
+                TokenKind.WHITESPACE,
+                TokenKind.COMMENT,
+                TokenKind.NEWLINE,
+            ):
+                break
+            self._advance()
+            end = self._prev_end()
+        return end
+
+    def _next_sibling_leading_index(self) -> int | None:
+        """Token index where the next sibling entry's leading trivia starts."""
+        tokens = self.tokens
+        n = len(tokens)
+        floor = self.pos
+        key_at: int | None = None
+        j = floor
+        while j < n:
+            kind = tokens[j].kind
+            if kind == TokenKind.DEDENT:
+                break
+            if kind == TokenKind.PLAIN_SCALAR and self._colon_after(j):
+                key_at = j
+                break
+            if kind in (
+                TokenKind.WHITESPACE,
+                TokenKind.COMMENT,
+                TokenKind.NEWLINE,
+                TokenKind.INDENT,
+            ):
+                j += 1
+                continue
+            break
+        if key_at is None:
+            return None
+        k = key_at
+        while k > floor and tokens[k - 1].kind == TokenKind.WHITESPACE:
+            k -= 1
+        while k > floor:
+            newline_at = k - 1
+            if tokens[newline_at].kind != TokenKind.NEWLINE:
+                break
+            comment_at = newline_at - 1
+            if comment_at < floor or tokens[comment_at].kind != TokenKind.COMMENT:
+                break
+            k = comment_at
+            while k > floor and tokens[k - 1].kind == TokenKind.WHITESPACE:
+                k -= 1
+        return k
 
     def _block_content_follows_after(self, index: int) -> bool:
         j = index
